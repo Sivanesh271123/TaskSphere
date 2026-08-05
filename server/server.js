@@ -55,7 +55,7 @@ app.use('/api/tasks', taskRoutes);
 // Wildcard handler for client-side routing in production
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../dist');
-  app.get('*', (req, res, next) => {
+  app.get(/.*/, (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
