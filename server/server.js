@@ -30,9 +30,12 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Security middleware
-app.use(helmet());
+// app.use(helmet());
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    console.log("Origin:", origin);
+    callback(null, true);
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -41,32 +44,17 @@ app.use(express.json());
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.resolve(__dirname, '../dist');
   
-  // Debug Middleware for Static Assets
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/assets/')) {
-      const targetFile = path.join(distPath, req.path);
-      console.log(`\n=== [Static Debug] Request: ${req.method} ${req.path} ===`);
-      console.log(`[Static Debug] __dirname:          ${__dirname}`);
-      console.log(`[Static Debug] process.cwd():      ${process.cwd()}`);
-      console.log(`[Static Debug] distPath:          ${distPath}`);
-      console.log(`[Static Debug] distPath Exists:    ${fs.existsSync(distPath)}`);
-      console.log(`[Static Debug] index.html Exists:  ${fs.existsSync(path.join(distPath, 'index.html'))}`);
-      console.log(`[Static Debug] targetFile:        ${targetFile}`);
-      console.log(`[Static Debug] targetFile Exists:  ${fs.existsSync(targetFile)}`);
-      if (fs.existsSync(distPath)) {
-        console.log(`[Static Debug] dist contents:     `, fs.readdirSync(distPath));
-        const assetsPath = path.join(distPath, 'assets');
-        console.log(`[Static Debug] assets dir exists:  ${fs.existsSync(assetsPath)}`);
-        if (fs.existsSync(assetsPath)) {
-          console.log(`[Static Debug] assets contents:   `, fs.readdirSync(assetsPath));
-        }
-      }
-      console.log(`==========================================\n`);
-    }
+  app.use((req,res,next)=>{
+    console.log("[BEFORE STATIC]", req.method, req.path);
     next();
   });
 
   app.use(express.static(distPath));
+
+  app.use((req,res,next)=>{
+    console.log("[AFTER STATIC]", req.method, req.path);
+    next();
+  });
 }
 
 // Mount Routes
