@@ -13,6 +13,7 @@ import authRoutes from './routes/authRoutes.js';
 import { initializeDatabase } from './config/db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,7 +45,14 @@ app.use(express.json());
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
+  const distPath = path.resolve(__dirname, '../dist');
+  console.log(`[Static Files] Serving from: ${distPath}`);
+  console.log(`[Static Files] Path exists: ${fs.existsSync(distPath)}`);
+  if (fs.existsSync(distPath)) {
+    console.log(`[Static Files] Contents:`, fs.readdirSync(distPath));
+  } else {
+    console.error(`[Static Files ERROR] dist directory not found at: ${distPath}`);
+  }
   app.use(express.static(distPath));
 }
 
@@ -54,12 +62,19 @@ app.use('/api/tasks', taskRoutes);
 
 // Wildcard handler for client-side routing in production
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
+  const distPath = path.resolve(__dirname, '../dist');
   app.get(/.*/, (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    // Only serve index.html for page navigation requests
+    // Skip API endpoints and requests for missing static files (which contain extensions)
+    if (req.path.startsWith('/api') || (!req.accepts('html') && req.path.includes('.'))) {
       return next();
     }
-    res.sendFile(path.join(distPath, 'index.html'));
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+      if (err) {
+        console.error(`[Static Files ERROR] Failed to send index.html:`, err.message);
+        next(err);
+      }
+    });
   });
 }
 
