@@ -1,0 +1,43 @@
+services:
+  # TaskSphere Unified Web App & Express Service
+  - type: web
+    name: tasksphere-app
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_HOST
+        fromDatabase:
+          name: tasksphere-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: tasksphere-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: tasksphere-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: tasksphere-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: tasksphere-db
+          property: database
+
+databases:
+  # Managed Production MySQL Database
+  - name: tasksphere-db
+    databaseName: tasksphere
+    user: root
+    plan: free
+    region: oregon
