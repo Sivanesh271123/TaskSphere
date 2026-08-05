@@ -66,7 +66,7 @@ const TaskModel = {
     const existing = await this.findById(id, userId);
     if (!existing) throw new Error('Task not found');
 
-    await db.execute('UPDATE tasks SET completed = ? WHERE id = ? AND user_id = ?', [existing.completed ? 0 : 1, id, userId]);
+    await db.execute('UPDATE tasks SET completed = ? WHERE id = ? AND user_id = ?', [!existing.completed, id, userId]);
 
     return this.findById(id, userId);
   },
@@ -80,7 +80,7 @@ const TaskModel = {
   },
 
   async purgeCompleted(userId) {
-    const [result] = await db.execute('DELETE FROM tasks WHERE user_id = ? AND completed = 1', [userId]);
+    const [result] = await db.execute('DELETE FROM tasks WHERE user_id = ? AND completed = true', [userId]);
     return result.affectedRows;
   },
 

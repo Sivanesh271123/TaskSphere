@@ -1,10 +1,11 @@
 /**
- * MySQL Database Connection
- * Uses mysql2/promise for async CRUD operations against a MySQL database.
+ * PostgreSQL Database Connection
+ * Uses pg Client Pool with MySQL-style compatibility layers to run seamlessly.
+ * Includes host, port, database logging, and SSL configuration matching Render requirements.
  */
 
 import dotenv from 'dotenv';
-import mysql from 'mysql2/promise';
+import pg from 'pg';
 
 dotenv.config();
 
@@ -13,39 +14,45 @@ const {
   DB_USER = 'root',
   DB_PASSWORD = '',
   DB_NAME = 'tasksphere',
-  DB_PORT = '3306'
+  DB_PORT = '5432'
 } = process.env;
 
-const pool = mysql.createPool({
+const { Pool } = pg;
+
+// ─── Connection Configuration & Logging ──────────────────────────────────────
+console.log(`\n=== [Database Connection Attempt] ===`);
+console.log(`[DB INFO] Driver: PostgreSQL`);
+console.log(`[DB INFO] Connection Target Host: "${DB_HOST}"`);
+console.log(`[DB INFO] Connection Target Port: "${DB_PORT}"`);
+console.log(`[DB INFO] Target Database Name:   "${DB_NAME}"`);
+console.log(`[DB INFO] Database Username:      "${DB_USER}"`);
+
+const isLocal = DB_HOST === 'localhost' || DB_HOST === '127.0.0.1';
+const sslConfig = isLocal ? false : { rejectUnauthorized: false };
+
+console.log(`[DB INFO] Configured SSL Mode:    ${isLocal ? 'Disabled (Local Connection)' : 'Enabled (rejectUnauthorized: false)'}`);
+console.log(`====================================\n`);
+
+const pool = new Pool({
   host: DB_HOST,
   user: DB_USER,
   password: DB_PASSWORD,
   database: DB_NAME,
-  port: parseInt(DB_PORT, 10) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+  port: parseInt(DB_PORT, 10) || 5432,
+  ssl: sslConfig
 });
 
 export async function initializeDatabase() {
-  const tempConnection = await mysql.createConnection({
-    host: DB_HOST,
-    user: DB_USER,
-    password: DB_PASSWORD,
-    port: parseInt(DB_PORT, 10) || 3306
-  });
-
+  console.log(`[DB INIT] Verifying database connection and initial tables...`);
+  const client = await pool.connect();
+  
   try {
-    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\``);
-  } finally {
-    await tempConnection.end();
-  }
-
-  const connection = await pool.getConnection();
-  try {
-    await connection.execute(`
+    console.log(`[DB INIT] Database connection successfully established. Creating tables...`);
+    
+    // Create users table
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INT PRIMARY KEY AUTO_INCREMENT,
+        id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
@@ -53,40 +60,76 @@ export async function initializeDatabase() {
       )
     `);
 
-    await connection.execute(`
+    // Create tasks table
+    await client.query(`
       CREATE TABLE IF NOT EXISTS tasks (
-        id INT PRIMARY KEY AUTO_INCREMENT,
+        id SERIAL PRIMARY KEY,
         user_id INT NOT NULL,
         title VARCHAR(255) NOT NULL,
         description TEXT NULL,
         category VARCHAR(50) NULL,
         priority VARCHAR(20) NULL,
         due_date DATE NULL,
-        completed TINYINT(1) NOT NULL DEFAULT 0,
+        completed BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);
 
-    const [userCountRows] = await connection.execute('SELECT COUNT(*) AS count FROM users');
-    if (userCountRows[0].count === 0) {
-      console.warn('No users exist yet. Please register a new account to continue.');
+    const userCountResult = await client.query('SELECT COUNT(*) AS count FROM users');
+    if (parseInt(userCountResult.rows[0].count, 10) === 0) {
+      console.warn('[DB INIT] No users exist yet. Please register a new account.');
     }
-
-    const [columnRows] = await connection.execute(
-      'SELECT COUNT(*) AS count FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?',
-      [DB_NAME, 'tasks', 'user_id']
-    );
-
-    if (columnRows[0].count === 0) {
-      throw new Error(
-        'Database schema mismatch: tasks.user_id is required. ' +
-        'Please run a migration to add the user_id column and preserve existing task data.'
-      );
-    }
+    
+    console.log(`[DB INIT] Database and tables successfully verified.`);
+  } catch (err) {
+    console.error(`[DB INIT ERROR] Table initialization failed:`, err.message);
+    throw err;
   } finally {
-    connection.release();
+    client.release();
   }
 }
 
-export default pool;
+// ─── MySQL-to-PostgreSQL Query Compatibility Wrapper ─────────────────────────
+const db = {
+  async execute(sql, params = []) {
+    // 1. Convert MySQL '?' parameter markers to PostgreSQL '$1', '$2', ...
+    let pgSql = sql;
+    let paramIndex = 1;
+    pgSql = pgSql.replace(/\?/g, () => `$${paramIndex++}`);
+    
+    // 2. Append ' RETURNING *' to INSERT commands to retrieve the auto-increment serial ID
+    if (pgSql.trim().toUpperCase().startsWith('INSERT ')) {
+      pgSql += ' RETURNING *';
+    }
+
+    try {
+      const result = await pool.query(pgSql, params);
+
+      // 3. Mock mysql2 metadata response schemas for insert/update/delete requests
+      if (sql.trim().toUpperCase().startsWith('INSERT ')) {
+        const insertedRow = result.rows[0];
+        const mockResult = {
+          insertId: insertedRow ? insertedRow.id : null,
+          affectedRows: result.rowCount
+        };
+        return [mockResult];
+      } else if (sql.trim().toUpperCase().startsWith('DELETE ') || sql.trim().toUpperCase().startsWith('UPDATE ')) {
+        const mockResult = {
+          affectedRows: result.rowCount
+        };
+        return [mockResult];
+      }
+
+      // 4. Return array format matching MySQL [rows] structure
+      return [result.rows];
+    } catch (err) {
+      console.error(`[DB QUERY ERROR] SQL Execution failed:`, err.message);
+      console.error(`[DB QUERY ERROR] Parsed SQL Command:`, pgSql);
+      throw err;
+    }
+  }
+};
+
+export default db;
+export { pool };
