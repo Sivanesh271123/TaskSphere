@@ -65,8 +65,9 @@ if (process.env.NODE_ENV === 'production') {
   const distPath = path.resolve(__dirname, '../dist');
   app.get(/.*/, (req, res, next) => {
     // Only serve index.html for page navigation requests
-    // Skip API endpoints and requests for missing static files (which contain extensions)
-    if (req.path.startsWith('/api') || (!req.accepts('html') && req.path.includes('.'))) {
+    // Skip API endpoints, files with extensions, and requests starting with /assets/
+    const isAsset = req.path.includes('.') || req.path.startsWith('/assets/');
+    if (req.path.startsWith('/api') || isAsset) {
       return next();
     }
     res.sendFile(path.join(distPath, 'index.html'), (err) => {
