@@ -32,13 +32,7 @@ if (process.env.NODE_ENV === 'production') {
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: (origin, callback) => {
-    // In production, allow same-origin requests (origin is undefined for same-origin requests)
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS policy: Origin not allowed'));
-  },
+  origin: true,
   credentials: true
 }));
 app.use(express.json());
@@ -46,13 +40,32 @@ app.use(express.json());
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.resolve(__dirname, '../dist');
-  console.log(`[Static Files] Serving from: ${distPath}`);
-  console.log(`[Static Files] Path exists: ${fs.existsSync(distPath)}`);
-  if (fs.existsSync(distPath)) {
-    console.log(`[Static Files] Contents:`, fs.readdirSync(distPath));
-  } else {
-    console.error(`[Static Files ERROR] dist directory not found at: ${distPath}`);
-  }
+  
+  // Debug Middleware for Static Assets
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/assets/')) {
+      const targetFile = path.join(distPath, req.path);
+      console.log(`\n=== [Static Debug] Request: ${req.method} ${req.path} ===`);
+      console.log(`[Static Debug] __dirname:          ${__dirname}`);
+      console.log(`[Static Debug] process.cwd():      ${process.cwd()}`);
+      console.log(`[Static Debug] distPath:          ${distPath}`);
+      console.log(`[Static Debug] distPath Exists:    ${fs.existsSync(distPath)}`);
+      console.log(`[Static Debug] index.html Exists:  ${fs.existsSync(path.join(distPath, 'index.html'))}`);
+      console.log(`[Static Debug] targetFile:        ${targetFile}`);
+      console.log(`[Static Debug] targetFile Exists:  ${fs.existsSync(targetFile)}`);
+      if (fs.existsSync(distPath)) {
+        console.log(`[Static Debug] dist contents:     `, fs.readdirSync(distPath));
+        const assetsPath = path.join(distPath, 'assets');
+        console.log(`[Static Debug] assets dir exists:  ${fs.existsSync(assetsPath)}`);
+        if (fs.existsSync(assetsPath)) {
+          console.log(`[Static Debug] assets contents:   `, fs.readdirSync(assetsPath));
+        }
+      }
+      console.log(`==========================================\n`);
+    }
+    next();
+  });
+
   app.use(express.static(distPath));
 }
 
@@ -92,6 +105,7 @@ app.use((req, res) => {
 // ─── Global Error Handler ────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Unhandled server error:', err.message);
+  console.error('Unhandled server error STACK TRACE:', err.stack);
   const status = err.status || 500;
   const message = process.env.NODE_ENV === 'production'
     ? 'Internal server error'
