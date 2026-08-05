@@ -11,6 +11,11 @@ import helmet from 'helmet';
 import taskRoutes from './routes/taskRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { initializeDatabase } from './config/db.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -27,6 +32,7 @@ if (process.env.NODE_ENV === 'production') {
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
+    // In production, allow same-origin requests (origin is undefined for same-origin requests)
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
@@ -36,9 +42,26 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Serve static assets in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../dist');
+  app.use(express.static(distPath));
+}
+
 // Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
+
+// Wildcard handler for client-side routing in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../dist');
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Health Check
 app.get('/api/health', (req, res) => {
