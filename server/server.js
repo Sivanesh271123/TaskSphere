@@ -28,32 +28,37 @@ const PORT = process.env.PORT || 5000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = CLIENT_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
 
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.endsWith('.onrender.com') ||
                       origin.startsWith('http://localhost:') || 
                       origin.startsWith('http://127.0.0.1:');
     if (isAllowed) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    return callback(null, true);
   },
   credentials: true
 }));
+
 app.use(express.json());
 
-// Serve static assets in production
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.resolve(__dirname, '../dist');
+// Serve static assets whenever build output exists
+const distPath = path.resolve(__dirname, '../dist');
+const indexPath = path.resolve(distPath, 'index.html');
+const distExists = fs.existsSync(indexPath);
+
+if (distExists) {
   app.use(express.static(distPath));
 }
 
@@ -63,17 +68,18 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Wildcard handler for client-side routing in production
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.resolve(__dirname, '../dist');
-  app.get(/.*/, (req, res, next) => {
-    // Only serve index.html for page navigation requests
-    // Skip API endpoints, files with extensions, and requests starting with /assets/
-    const isAsset = req.path.includes('.') || req.path.startsWith('/assets/');
-    if (req.path.startsWith('/api') || isAsset) {
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'TaskSphere API is running', timestamp: new Date().toISOString() });
+});
+
+// Wildcard handler for SPA client-side routing (Express v5 safe)
+if (distExists) {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
       return next();
     }
-    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    res.sendFile('index.html', { root: distPath }, (err) => {
       if (err) {
         console.error(`[Static Files ERROR] Failed to send index.html:`, err.message);
         next(err);
@@ -81,11 +87,6 @@ if (process.env.NODE_ENV === 'production') {
     });
   });
 }
-
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'TaskSphere API is running', timestamp: new Date().toISOString() });
-});
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((req, res) => {
