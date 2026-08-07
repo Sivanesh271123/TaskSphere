@@ -4,6 +4,7 @@ import {
   Database, Sun, Moon, Download, Sparkles 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import useFocusTrap from '../hooks/useFocusTrap.js';
 
 export default function CommandPalette({ 
   isOpen, 
@@ -13,6 +14,7 @@ export default function CommandPalette({
   onToggleTheme, 
   onOpenDBModal 
 }) {
+  const modalRef = useFocusTrap(isOpen, onClose);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -63,6 +65,7 @@ export default function CommandPalette({
     <AnimatePresence>
       <div className="cmd-modal-overlay" onClick={onClose}>
         <motion.div 
+          ref={modalRef}
           initial={{ opacity: 0, scale: 0.95, y: -20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -20 }}
@@ -71,15 +74,15 @@ export default function CommandPalette({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="cmd-input-row">
-            <Search size={18} style={{ color: 'var(--text-muted)' }} />
+            <Search size={18} style={{ color: 'var(--text-secondary)' }} />
             <input 
               type="text" 
-              placeholder="Type a command or search action..." 
+              placeholder="Search tasks, categories, or commands..." 
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
             />
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4 }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--surface-subtle)', padding: '2px 6px', borderRadius: 4 }}>
               ESC
             </span>
           </div>
@@ -101,7 +104,7 @@ export default function CommandPalette({
                 </div>
               ))
             ) : (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                 No matching commands found.
               </div>
             )}

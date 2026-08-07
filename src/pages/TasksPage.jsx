@@ -6,26 +6,28 @@ import {
 import TaskCard from '../components/TaskCard';
 import KanbanView from '../components/KanbanView';
 import CalendarView from '../components/CalendarView';
-import SkeletonTaskCard from '../components/SkeletonTaskCard';
 import StatsOverview from '../components/StatsOverview';
 
 export default function TasksPage({
   tasks,
+  categories = [],
   isLoading,
   searchQuery,
-  setSearchQuery,
+  onSearchChange,
   statusFilter,
-  setStatusFilter,
+  onStatusFilterChange,
   categoryFilter,
-  setCategoryFilter,
+  onCategoryFilterChange,
   sortBy,
-  setSortBy,
-  filteredTasks,
+  onSortByChange,
   onToggleComplete,
-  onOpenEditModal,
-  onDeleteTask,
+  onEdit,
+  onDelete,
   onClearCompleted,
-  onOpenCreateModal
+  onOpenCreateModal,
+  onSaveTask,
+  onRescheduleTask,
+  onUpdateKanbanStatus
 }) {
   const [taskSubView, setTaskSubView] = useState('list'); // list | kanban | calendar
 
@@ -72,18 +74,24 @@ export default function TasksPage({
       {/* Sub View Renders */}
       {taskSubView === 'kanban' && (
         <KanbanView 
-          tasks={filteredTasks}
+          tasks={tasks}
+          categories={categories}
           onToggleComplete={onToggleComplete}
-          onEdit={onOpenEditModal}
-          onDelete={onDeleteTask}
+          onEdit={onEdit}
+          onDelete={onDelete}
           onOpenCreateModal={onOpenCreateModal}
+          onUpdateKanbanStatus={onUpdateKanbanStatus}
         />
       )}
 
       {taskSubView === 'calendar' && (
         <CalendarView 
           tasks={tasks}
-          onEdit={onOpenEditModal}
+          categories={categories}
+          onEdit={onEdit}
+          onToggleComplete={onToggleComplete}
+          onSaveTask={onSaveTask}
+          onRescheduleTask={onRescheduleTask}
           onOpenCreateModal={onOpenCreateModal}
         />
       )}
@@ -98,46 +106,36 @@ export default function TasksPage({
                 type="text" 
                 placeholder="Search by title, category, description..." 
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => onSearchChange(e.target.value)}
               />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <button 
                 className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('all')}
+                onClick={() => onStatusFilterChange('all')}
               >
                 All
               </button>
               <button 
                 className={`filter-chip ${statusFilter === 'active' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('active')}
+                onClick={() => onStatusFilterChange('active')}
               >
                 Active
               </button>
               <button 
                 className={`filter-chip ${statusFilter === 'completed' ? 'active' : ''}`}
-                onClick={() => setStatusFilter('completed')}
+                onClick={() => onStatusFilterChange('completed')}
               >
                 Completed
               </button>
 
-              <select 
-                className="select-input"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-              >
-                <option value="all">All Categories</option>
-                <option value="Work">💻 Work</option>
-                <option value="Personal">🏠 Personal</option>
-                <option value="Urgent">🔥 Urgent</option>
-                <option value="Ideas">💡 Ideas</option>
-              </select>
+
 
               <select 
                 className="select-input"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => onSortByChange(e.target.value)}
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -157,23 +155,46 @@ export default function TasksPage({
             </div>
           </div>
 
+          {/* Category Filter Bar */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '0.5rem', 
+            overflowX: 'auto', 
+            paddingBottom: '0.5rem', 
+            marginBottom: '1rem', 
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none'
+          }}>
+            {['All', 'Personal', 'Study', 'Work', 'Shopping', 'Health', 'Finance', 'Others'].map(cat => (
+              <button
+                key={cat}
+                className={`filter-chip ${categoryFilter === (cat === 'All' ? 'all' : cat) ? 'active' : ''}`}
+                onClick={() => onCategoryFilterChange(cat === 'All' ? 'all' : cat)}
+                style={{ flexShrink: 0 }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
           {/* Task Grid */}
           {isLoading ? (
             <div className="tasks-grid-luxury">
-              <SkeletonTaskCard />
-              <SkeletonTaskCard />
-              <SkeletonTaskCard />
+              <div className="skeleton-card" />
+              <div className="skeleton-card" />
+              <div className="skeleton-card" />
             </div>
-          ) : filteredTasks.length > 0 ? (
+          ) : tasks.length > 0 ? (
             <div className="tasks-grid-luxury">
               <AnimatePresence>
-                {filteredTasks.map(task => (
+                {tasks.map(task => (
                   <TaskCard 
                     key={task.id}
                     task={task}
+                    categories={categories}
                     onToggleComplete={onToggleComplete}
-                    onEdit={onOpenEditModal}
-                    onDelete={onDeleteTask}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
                   />
                 ))}
               </AnimatePresence>

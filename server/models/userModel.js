@@ -33,6 +33,48 @@ const UserModel = {
   async findById(id) {
     const [rows] = await db.execute('SELECT * FROM users WHERE id = ?', [id]);
     return rows[0] ? formatUser(rows[0]) : null;
+  },
+
+  async setResetOTP(userId, otp, expiresAt) {
+    await db.execute(
+      'UPDATE users SET reset_otp = ?, reset_otp_expires = ?, reset_otp_attempts = 0, reset_otp_verified = 0 WHERE id = ?',
+      [otp, expiresAt, userId]
+    );
+  },
+
+  async incrementResetOTPAttempts(userId) {
+    await db.execute(
+      'UPDATE users SET reset_otp_attempts = reset_otp_attempts + 1 WHERE id = ?',
+      [userId]
+    );
+  },
+
+  async markOTPVerified(userId) {
+    await db.execute(
+      'UPDATE users SET reset_otp_verified = 1 WHERE id = ?',
+      [userId]
+    );
+  },
+
+  async setResetToken(userId, token, expiresAt) {
+    await db.execute(
+      'UPDATE users SET reset_token = ?, reset_token_expires = ?, reset_otp_verified = 1, reset_otp = NULL, reset_otp_expires = NULL, reset_otp_attempts = 0 WHERE id = ?',
+      [token, expiresAt, userId]
+    );
+  },
+
+  async updatePassword(userId, hashedPassword) {
+    await db.execute(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedPassword, userId]
+    );
+  },
+
+  async clearResetOTP(userId) {
+    await db.execute(
+      'UPDATE users SET reset_otp = NULL, reset_otp_expires = NULL, reset_otp_attempts = 0, reset_otp_verified = 0, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+      [userId]
+    );
   }
 };
 

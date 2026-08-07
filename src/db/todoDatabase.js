@@ -4,7 +4,7 @@
  * API_BASE is configurable via VITE_API_BASE environment variable.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || (
+export const API_BASE = import.meta.env.VITE_API_BASE || (
   import.meta.env.DEV ? 'http://localhost:5000/api' : '/api'
 );
 
@@ -42,8 +42,12 @@ async function apiFetch(endpoint, options = {}) {
 }
 
 class TaskSphereAPI {
-  async getAllTasks() {
-    return apiFetch('/tasks');
+  async getAllTasks(start, end) {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start);
+    if (end) params.append('end', end);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return apiFetch(`/tasks${queryString}`);
   }
 
   async createTask(taskData) {
@@ -83,6 +87,17 @@ class TaskSphereAPI {
     return apiFetch('/tasks/export/formatted');
   }
 
+  async getCategories() {
+    return apiFetch('/categories');
+  }
+
+  async createCategory(categoryData) {
+    return apiFetch('/categories', {
+      method: 'POST',
+      body: categoryData
+    });
+  }
+
   async seedSampleData() {
     const samples = [
       { title: 'Design Glassmorphic UI', description: 'Create premium black & gold SaaS theme.', category: 'Work', priority: 'High', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
@@ -99,11 +114,7 @@ class TaskSphereAPI {
   }
 
   async resetDatabase() {
-    await apiFetch('/tasks/completed/purge', { method: 'DELETE' });
-    const allTasks = await this.getAllTasks();
-    for (const t of allTasks) {
-      await this.deleteTask(t.id);
-    }
+    await apiFetch('/tasks', { method: 'DELETE' });
     return true;
   }
 

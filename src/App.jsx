@@ -1,125 +1,96 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowUp } from 'lucide-react';
-import { dbService } from './db/todoDatabase';
 import Navbar from './components/Navbar';
 import CommandPalette from './components/CommandPalette';
 import Toast from './components/Toast';
 import TaskFormModal from './components/TaskFormModal';
 import DatabaseModal from './components/DatabaseModal';
+import SettingsModal from './components/SettingsModal';
 import FloatingActionButton from './components/FloatingActionButton';
+import { calculateTaskStatus } from './utils/statusHelper.js';
+import { notifyTaskCompleted } from './utils/notificationService.js';
 
-// Page Imports
+// Page Imports with Code Splitting / Lazy Loading
 import HomePage from './pages/HomePage';
-import TasksPage from './pages/TasksPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import AuthPage from './pages/AuthPage';
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
 
+// Custom Hooks
+import useToast from './hooks/useToast';
+import useAuth from './hooks/useAuth';
+import useTasks from './hooks/useTasks';
+import useFCM from './hooks/useFCM';
+import useInAppNotifications from './hooks/useInAppNotifications';
 // ─── Notification Helper ─────────────────────────────────────────────────────
-let notificationIdCounter = 0;
-function createNotification(text) {
-  return {
-    id: ++notificationIdCounter,
-    text,
-    time: 'Just now',
-    timestamp: Date.now()
-  };
-}
-
-function formatNotificationTime(timestamp) {
-  const diff = Date.now() - timestamp;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-// ─── Gamification Helpers ────────────────────────────────────────────────────
-function computeGamification(tasks) {
-  const completed = tasks.filter(t => t.completed).length;
-  const xpPerTask = 50;
-  const totalXP = completed * xpPerTask;
-
-  // Level thresholds: Level 1 = 0 XP, Level 2 = 100 XP, Level 3 = 250 XP, Level 4 = 500 XP, Level 5 = 800 XP, etc.
-  const levels = [
-    { level: 1, title: 'Task Apprentice', xpNeeded: 0 },
-    { level: 2, title: 'Focus Initiate', xpNeeded: 100 },
-    { level: 3, title: 'Silver Strategist', xpNeeded: 250 },
-    { level: 4, title: 'Gold Architect', xpNeeded: 500 },
-    { level: 5, title: 'Diamond Executor', xpNeeded: 800 },
-    { level: 6, title: 'Master Strategist', xpNeeded: 1200 },
-    { level: 7, title: 'Legendary Achiever', xpNeeded: 2000 }
-  ];
-
-  let currentLevel = levels[0];
-  let nextLevel = levels[1];
-  for (let i = levels.length - 1; i >= 0; i--) {
-    if (totalXP >= levels[i].xpNeeded) {
-      currentLevel = levels[i];
-      nextLevel = levels[i + 1] || null;
-      break;
-    }
-  }
-
-  const xpInCurrentLevel = totalXP - currentLevel.xpNeeded;
-  const xpForNextLevel = nextLevel ? (nextLevel.xpNeeded - currentLevel.xpNeeded) : 1;
-  const levelProgress = nextLevel ? Math.min((xpInCurrentLevel / xpForNextLevel) * 100, 100) : 100;
-
-  // Streak: count consecutive days (from today backwards) that have at least 1 completed task
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  let streak = 0;
-  const completedDates = new Set();
-  tasks.forEach(t => {
-    if (t.completed && t.createdAt) {
-      const d = new Date(t.createdAt);
-      d.setHours(0, 0, 0, 0);
-      completedDates.add(d.getTime());
-    }
-  });
-  for (let i = 0; i < 365; i++) {
-    const checkDate = new Date(today.getTime() - i * 86400000);
-    if (completedDates.has(checkDate.getTime())) {
-      streak++;
-    } else if (i > 0) {
-      break; // only break after checking today
-    }
-  }
-
-  // Weekly completion percentage
-  const oneWeekAgo = new Date(today.getTime() - 7 * 86400000);
-  const thisWeekTasks = tasks.filter(t => {
-    const d = new Date(t.createdAt);
-    return d >= oneWeekAgo;
-  });
-  const thisWeekCompleted = thisWeekTasks.filter(t => t.completed).length;
-  const weeklyPct = thisWeekTasks.length > 0 ? Math.round((thisWeekCompleted / thisWeekTasks.length) * 100) : 0;
-
-  return {
-    totalXP,
-    currentLevel,
-    nextLevel,
-    levelProgress,
-    xpInCurrentLevel,
-    xpForNextLevel: nextLevel ? (nextLevel.xpNeeded - currentLevel.xpNeeded) : 0,
-    xpDisplay: nextLevel
-      ? `${totalXP - currentLevel.xpNeeded} / ${nextLevel.xpNeeded - currentLevel.xpNeeded} XP`
-      : `${totalXP} XP (MAX)`,
-    streak,
-    weeklyPct,
-    tasksToNextLevel: nextLevel ? Math.ceil((nextLevel.xpNeeded - totalXP) / xpPerTask) : 0
-  };
-}
 
 export default function App() {
-  const [tasks, setTasks] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [authReady, setAuthReady] = useState(false);
-  const [user, setUser] = useState(null);
+  // ─── Toast Hook ────────────────────────────────────────────────────────────
+  const { toasts, addToast, removeToast } = useToast();
 
-  // Theme with localStorage persistence
+  // ─── Notification Cycle Breaker ────────────────────────────────────────────
+  // We use a ref to hold createNotification so we can pass addNotification to useAuth 
+  // before useInAppNotifications is initialized (preventing the TDZ for 'user').
+  const createNotificationRef = useRef(null);
+
+  const addNotification = useCallback((text, type = 'info', taskId = null, title = null) => {
+    if (createNotificationRef.current) {
+      createNotificationRef.current(text, type, taskId, title);
+    }
+  }, []);
+
+  // ─── Firebase Cloud Messaging ───────────────────────────────────────────────
+  useFCM(addToast, addNotification);
+
+  // ─── Auth Hook ──────────────────────────────────────────────────────────────
+  const { user, authReady, setUser, handleAuthSubmit, handleLogout } = useAuth(addToast, addNotification);
+
+  // ─── API Auth Error Handler ────────────────────────────────────────────────
+  const handleApiAuthError = useCallback((err) => {
+    if (err.status === 401) {
+      addToast('Session expired. Please log in again.', 'danger');
+      setUser(null);
+      return true;
+    }
+    return false;
+  }, [addToast, setUser]);
+
+  // ─── Real Notification System ──────────────────────────────────────────────
+  const {
+    notifications,
+    unreadCount,
+    hasMore,
+    fetchNotifications,
+    createNotification,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification
+  } = useInAppNotifications(user, handleApiAuthError);
+
+  // Update ref with actual createNotification
+  createNotificationRef.current = createNotification;
+
+  // ─── Tasks & Categories Hook ───────────────────────────────────────────────
+  const {
+    tasks,
+    categories,
+    isLoading,
+    fetchTasksFromDB,
+    fetchCategoriesFromDB,
+    handleSaveTask,
+    handleRescheduleTask,
+    handleToggleComplete,
+    handleDeleteTask,
+    handleClearCompleted,
+    handleCreateCategory,
+    handleSeedData,
+    handleResetDB,
+    clearTasksAndCategories,
+    updateTaskStatusLocally
+  } = useTasks(user, addToast, addNotification, handleApiAuthError);
+
+  // ─── Theme & UI States ─────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('tasksphere-theme') || 'dark';
@@ -128,7 +99,11 @@ export default function App() {
     }
   });
 
-  const [activePage, setActivePage] = useState('home'); // home | tasks | analytics
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const [activePage, setActivePage] = useState('home');
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,106 +116,143 @@ export default function App() {
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [isDBModalOpen, setIsDBModalOpen] = useState(false);
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
-
-  // Toast Notifications Stack
-  const [toasts, setToasts] = useState([]);
-
-  // Real Notification System
-  const [notifications, setNotifications] = useState([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem('notifications_enabled');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
 
   // Scroll Progress
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Apply theme on mount
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    return typeof Notification !== 'undefined' ? Notification.permission : 'default';
+  });
+
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
+    const syncPermission = () => {
+      if (typeof Notification !== 'undefined') {
+        setNotificationPermission(Notification.permission);
+      }
+    };
+
+    // Auto-prompt for permission if default
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission()
+        .then((perm) => {
+          setNotificationPermission(perm);
+        })
+        .catch((err) => console.error('Error requesting notification permission:', err));
+    }
+
+    window.addEventListener('focus', syncPermission);
+    return () => window.removeEventListener('focus', syncPermission);
   }, []);
 
-  const addNotification = useCallback((text) => {
-    setNotifications(prev => {
-      const updated = [createNotification(text), ...prev].slice(0, 20);
-      return updated;
+  // ─── Dynamic Task Reminders (Pure setTimeout Scheduler - No Polling) ───────
+  const notifiedTasksRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!notificationsEnabled) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    // Prune obsolete Set keys for tasks that were completed, deleted, or whose schedule changed
+    const activeKeys = new Set();
+    tasks.forEach(t => {
+      if (!t.completed && t.dueDate && t.dueTime) {
+        activeKeys.add(`${t.id}_${t.dueDate}_${t.dueTime}_30min`);
+        activeKeys.add(`${t.id}_${t.dueDate}_${t.dueTime}_exact`);
+        activeKeys.add(`${t.id}_${t.dueDate}_${t.dueTime}_overdue`);
+      }
     });
-  }, []);
-
-  // Update notification relative timestamps every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, time: formatNotificationTime(n.timestamp) }))
-      );
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const addToast = (message, type = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  };
-
-  const removeToast = (id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
-  const handleApiAuthError = (err) => {
-    if (!err?.message) return false;
-    const authError = err.status === 401 || /authenti|token|login|expired/i.test(err.message);
-    if (authError) {
-      setUser(null);
-      setTasks([]);
-      addToast('Session expired or unauthorized. Please sign in again.', 'danger');
-    }
-    return authError;
-  };
-
-  const fetchTasksFromDB = async (currentUser = user) => {
-    if (!currentUser) {
-      setTasks([]);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const data = await dbService.getAllTasks();
-      setTasks(data);
-    } catch (err) {
-      if (handleApiAuthError(err)) {
-        return;
+    for (const key of notifiedTasksRef.current) {
+      if (!activeKeys.has(key)) {
+        notifiedTasksRef.current.delete(key);
       }
-      console.error('Failed to load DB records:', err);
-      addToast('Failed to load database records. Please try again.', 'danger');
-    } finally {
-      setIsLoading(false);
     }
-  };
 
-  const checkAuth = async () => {
-    try {
-      const response = await dbService.me();
-      if (response.user) {
-        setUser(response.user);
-        await fetchTasksFromDB(response.user);
-      } else {
-        setUser(null);
-        setTasks([]);
+    const timeouts = [];
+    const now = new Date().getTime();
+
+    tasks.forEach(task => {
+      if (task.completed || !task.dueDate || !task.dueTime) return;
+
+      const [year, month, day] = task.dueDate.split('-').map(Number);
+      const [hour, minute] = task.dueTime.split(':').map(Number);
+      const dueDateTime = new Date(year, month - 1, day, hour, minute).getTime();
+
+      const msUntilDue = dueDateTime - now;
+      const msUntil30Min = msUntilDue - (30 * 60 * 1000);
+
+      const triggerNotification = (type) => {
+        const key = `${task.id}_${task.dueDate}_${task.dueTime}_${type}`;
+        if (notifiedTasksRef.current.has(key)) return;
+        
+        let title, body, msg;
+        if (type === '30min') {
+          title = 'Upcoming Task (30 min)';
+          body = `${task.title}\nCategory: ${task.category || 'Personal'}\nTime: ${task.dueTime.substring(0, 5)}`;
+          msg = `"${task.title}" is due in 30 minutes!`;
+        } else if (type === 'exact') {
+          title = 'Task Due Now';
+          body = `${task.title}\nCategory: ${task.category || 'Personal'}\nTime: ${task.dueTime.substring(0, 5)}`;
+          msg = `"${task.title}" is due now!`;
+        } else if (type === 'overdue') {
+          title = 'Task Overdue';
+          body = `${task.title}\nCategory: ${task.category || 'Personal'}`;
+          msg = `"${task.title}" is overdue!`;
+        }
+
+        if (Notification.permission === 'granted') {
+          try {
+            new Notification(title, {
+              body,
+              icon: "/favicon.ico"
+            });
+          } catch (err) {
+            console.error("Browser Notification Error:", err);
+          }
+        }
+        
+        createNotification(msg, type, task.id, task.title);
+        notifiedTasksRef.current.add(key);
+      };
+
+      // Handle Overdue (if overdue within the last 24h)
+      if (msUntilDue < 0 && msUntilDue > -86400000) {
+        triggerNotification('overdue');
       }
-    } catch (err) {
-      handleApiAuthError(err);
-      setUser(null);
-      setTasks([]);
-    } finally {
-      setAuthReady(true);
-    }
-  };
 
-  // Load session on startup
+      // Max timeout limit in JS is ~24.8 days (2147483647 ms)
+      if (msUntil30Min > 0 && msUntil30Min <= 2147483647) {
+        timeouts.push(setTimeout(() => triggerNotification('30min'), msUntil30Min));
+      }
+      
+      if (msUntilDue > 0 && msUntilDue <= 2147483647) {
+        timeouts.push(setTimeout(() => triggerNotification('exact'), msUntilDue));
+      }
+    });
+
+    return () => {
+      timeouts.forEach(clearTimeout);
+    };
+  }, [tasks, notificationsEnabled, notificationPermission]);
+
+  // Load user data on successful auth verification
   useEffect(() => {
-    checkAuth();
-  }, []);
+    if (user) {
+      fetchTasksFromDB(user);
+      fetchCategoriesFromDB(user);
+      fetchNotifications(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Scroll listener
   useEffect(() => {
@@ -277,135 +289,11 @@ export default function App() {
     addToast(`Switched to ${nextTheme} theme`, 'info');
   };
 
-  const handleAuthSubmit = async (mode, payload) => {
-    try {
-      const response = mode === 'signup'
-        ? await dbService.register({ name: payload.fullName, email: payload.email, password: payload.password })
-        : await dbService.login({ email: payload.email, password: payload.password, rememberMe: payload.rememberMe });
-
-      setUser(response.user);
-      setActivePage('home');
-      setTasks([]);
-      await fetchTasksFromDB(response.user);
-
-      const msg = mode === 'signup' ? 'Account created successfully' : 'Welcome back!';
-      addToast(msg, 'success');
-      addNotification(mode === 'signup' ? `🎉 Welcome to TaskSphere, ${response.user.name}!` : `👋 Welcome back, ${response.user.name}!`);
-
-      return response;
-    } catch (err) {
-      throw err;
-    }
+  const onLogoutClick = () => {
+    handleLogout(clearTasksAndCategories);
   };
 
-  const handleLogout = async () => {
-    try {
-      await dbService.logout();
-    } catch (err) {
-      console.error('Logout failed:', err);
-    } finally {
-      setUser(null);
-      setTasks([]);
-      setNotifications([]);
-      setActivePage('home');
-      addToast('You have been logged out', 'info');
-    }
-  };
-
-  // CRUD Handlers
-  const handleSaveTask = async (taskData) => {
-    try {
-      if (taskToEdit) {
-        const updated = await dbService.updateTask(taskToEdit.id, taskData);
-        setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
-        addToast('Task updated successfully', 'success');
-        addNotification(`✏️ Task "${updated.title}" updated`);
-      } else {
-        const created = await dbService.createTask(taskData);
-        setTasks(prev => [created, ...prev]);
-        addToast('New task added to your workspace', 'success');
-        addNotification(`✨ New task "${created.title}" created`);
-      }
-      setTaskToEdit(null);
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to save task. Please try again.', 'danger');
-    }
-  };
-
-  const handleToggleComplete = async (id) => {
-    try {
-      const updated = await dbService.toggleTaskStatus(id);
-      setTasks(prev => prev.map(t => t.id === id ? updated : t));
-
-      if (updated.completed) {
-        addToast('Task completed! +50 XP 🏆', 'success');
-        addNotification(`✅ Task "${updated.title}" completed! +50 XP 🏆`);
-      } else {
-        addToast('Task marked active', 'success');
-        addNotification(`🔄 Task "${updated.title}" marked active`);
-      }
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to update task status.', 'danger');
-    }
-  };
-
-  const handleDeleteTask = async (id) => {
-    try {
-      const taskToDelete = tasks.find(t => t.id === id);
-      await dbService.deleteTask(id);
-      setTasks(prev => prev.filter(t => t.id !== id));
-      addToast('Task deleted from database', 'danger');
-      addNotification(`🗑️ Task "${taskToDelete?.title || 'Unknown'}" deleted`);
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to delete task.', 'danger');
-    }
-  };
-
-  const handleClearCompleted = async () => {
-    try {
-      const count = await dbService.purgeCompletedTasks();
-      setTasks(prev => prev.filter(t => !t.completed));
-      addToast(`Purged ${count} completed tasks`, 'info');
-      addNotification(`🧹 Purged ${count} completed tasks from database`);
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to clear completed tasks.', 'danger');
-    }
-  };
-
-  const handleSeedData = async () => {
-    try {
-      await dbService.seedSampleData();
-      await fetchTasksFromDB();
-      addToast('Sample demo tasks loaded into database', 'info');
-      addNotification('📦 Sample demo tasks loaded into database');
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to load sample data.', 'danger');
-    }
-  };
-
-  const handleResetDB = async () => {
-    if (!window.confirm('Are you sure you want to clear all tasks from the database?')) {
-      return;
-    }
-
-    try {
-      await dbService.resetDatabase();
-      setTasks([]);
-      setIsDBModalOpen(false);
-      addToast('Database wiped clean', 'danger');
-      addNotification('💥 Database wiped — all tasks removed');
-    } catch (err) {
-      if (handleApiAuthError(err)) return;
-      addToast(err.message || 'Failed to reset the database.', 'danger');
-    }
-  };
-
-  // Filter Tasks
+  // Filter & Sort Tasks
   const filteredTasks = useMemo(() => {
     return tasks
       .filter(t => {
@@ -417,7 +305,7 @@ export default function App() {
           const q = searchQuery.toLowerCase();
           const titleMatch = t.title.toLowerCase().includes(q);
           const descMatch = t.description && t.description.toLowerCase().includes(q);
-          const catMatch = t.category.toLowerCase().includes(q);
+          const catMatch = t.category ? t.category.toLowerCase().includes(q) : false;
           return titleMatch || descMatch || catMatch;
         }
 
@@ -426,7 +314,30 @@ export default function App() {
       .sort((a, b) => {
         if (sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
         if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
-        if (sortBy === 'dueDate') return new Date(a.dueDate) - new Date(b.dueDate);
+        if (sortBy === 'dueDate') {
+          const statusA = calculateTaskStatus(a);
+          const statusB = calculateTaskStatus(b);
+          
+          const rank = {
+            'Overdue': 1,
+            'Due Today': 2,
+            'Upcoming': 3,
+            'No Due Date': 4,
+            'Completed': 5
+          };
+          
+          if (rank[statusA] !== rank[statusB]) {
+            return rank[statusA] - rank[statusB];
+          }
+          
+          if (a.dueDate && b.dueDate) {
+            const dateA = new Date(`${a.dueDate}T${a.dueTime || '00:00:00'}`);
+            const dateB = new Date(`${b.dueDate}T${b.dueTime || '00:00:00'}`);
+            return dateA - dateB;
+          }
+          
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        }
         if (sortBy === 'priority') {
           const pRank = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
           return pRank[b.priority] - pRank[a.priority];
@@ -434,9 +345,6 @@ export default function App() {
         return 0;
       });
   }, [tasks, searchQuery, statusFilter, categoryFilter, sortBy]);
-
-  // Compute gamification from real data
-  const gamification = useMemo(() => computeGamification(tasks), [tasks]);
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -454,7 +362,15 @@ export default function App() {
   }
 
   if (!user) {
-    return <AuthPage onAuthSuccess={handleAuthSubmit} />;
+    return (
+      <Suspense fallback={
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-dark)' }}>
+          <div className="auth-spinner" />
+        </div>
+      }>
+        <AuthPage onAuthSuccess={(mode, payload) => handleAuthSubmit(mode, payload, fetchTasksFromDB, fetchCategoriesFromDB)} />
+      </Suspense>
+    );
   }
 
   return (
@@ -462,11 +378,8 @@ export default function App() {
       {/* Top Scroll Progress Bar */}
       <div className="scroll-progress-bar" style={{ width: `${scrollProgress}%` }} />
 
-      {/* Aurora Gradient Background */}
+      {/* Executive Luxury Ambient Background */}
       <div className="aurora-bg">
-        <div className="aurora-orb aurora-orb-1" />
-        <div className="aurora-orb aurora-orb-2" />
-        <div className="aurora-orb aurora-orb-3" />
         <div className="noise-overlay" />
       </div>
 
@@ -481,60 +394,76 @@ export default function App() {
           theme={theme}
           onToggleTheme={toggleTheme}
           user={user}
-          onLogout={handleLogout}
+          onLogout={onLogoutClick}
           notifications={notifications}
+          unreadCount={unreadCount}
+          hasMoreNotifications={hasMore}
+          onOpenSettingsModal={() => setIsSettingsOpen(true)}
+          onPermissionChange={setNotificationPermission}
+          onMarkAsReadNotification={markAsRead}
+          onMarkAllAsReadNotification={markAllAsRead}
+          onDeleteNotification={deleteNotification}
+          onLoadMoreNotifications={() => fetchNotifications(false)}
         />
 
-        {/* Dynamic Page Rendering */}
-        <AnimatePresence mode="wait">
-          {activePage === 'home' && (
-            <HomePage 
-              key="home"
-              tasks={tasks}
-              user={user}
-              gamification={gamification}
-              onNavigateToTasks={() => setActivePage('tasks')}
-              onOpenCreateModal={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }}
-              onOpenDBModal={() => setIsDBModalOpen(true)}
-              onToggleComplete={handleToggleComplete}
-            />
-          )}
+        {/* Dynamic Page Rendering with Suspense Code Splitting */}
+        <Suspense fallback={
+          <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="auth-spinner" />
+          </div>
+        }>
+          <AnimatePresence mode="wait">
+            {activePage === 'home' && (
+              <HomePage 
+                key="home"
+                tasks={tasks}
+                user={user}
+                categories={categories}
+                onPageChange={setActivePage}
+                onToggleComplete={(id) => handleToggleComplete(id, notificationsEnabled, notifyTaskCompleted)}
+              />
+            )}
 
-          {activePage === 'tasks' && (
-            <TasksPage 
-              key="tasks"
-              tasks={tasks}
-              isLoading={isLoading}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              categoryFilter={categoryFilter}
-              setCategoryFilter={setCategoryFilter}
-              sortBy={sortBy}
-              setSortBy={setSortBy}
-              filteredTasks={filteredTasks}
-              onToggleComplete={handleToggleComplete}
-              onOpenEditModal={(t) => { setTaskToEdit(t); setIsTaskModalOpen(true); }}
-              onDeleteTask={handleDeleteTask}
-              onClearCompleted={handleClearCompleted}
-              onOpenCreateModal={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }}
-            />
-          )}
+            {activePage === 'tasks' && (
+              <TasksPage 
+                key="tasks"
+                tasks={filteredTasks}
+                categories={categories}
+                isLoading={isLoading}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                categoryFilter={categoryFilter}
+                onCategoryFilterChange={setCategoryFilter}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                onToggleComplete={(id) => handleToggleComplete(id, notificationsEnabled, notifyTaskCompleted)}
+                onEdit={(t) => { setTaskToEdit(t); setIsTaskModalOpen(true); }}
+                onDelete={handleDeleteTask}
+                onClearCompleted={handleClearCompleted}
+                onOpenCreateModal={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }}
+                onSaveTask={(data) => handleSaveTask(data, null, null)}
+                onRescheduleTask={handleRescheduleTask}
+                onUpdateKanbanStatus={updateTaskStatusLocally}
+              />
+            )}
 
-          {activePage === 'analytics' && (
-            <AnalyticsPage 
-              key="analytics"
-              tasks={tasks}
-            />
-          )}
-        </AnimatePresence>
+            {activePage === 'analytics' && (
+              <AnalyticsPage 
+                key="analytics"
+                tasks={tasks}
+                notifications={notifications}
+              />
+            )}
+          </AnimatePresence>
+        </Suspense>
       </div>
 
       {/* Floating Action Button */}
       <FloatingActionButton onClick={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }} />
 
-      {/* Back to Top */}
+      {/* Back to Top Button */}
       <AnimatePresence>
         {showBackToTop && (
           <motion.button
@@ -542,6 +471,7 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={scrollToTop}
+            aria-label="Scroll back to top of page"
             style={{
               position: 'fixed', bottom: '2.5rem', left: '2.5rem',
               width: 44, height: 44, borderRadius: '50%',
@@ -571,8 +501,10 @@ export default function App() {
       <TaskFormModal 
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
-        onSave={handleSaveTask}
+        onSave={(data) => handleSaveTask(data, taskToEdit, setTaskToEdit)}
         taskToEdit={taskToEdit}
+        categories={categories}
+        onCreateCategory={handleCreateCategory}
       />
 
       {/* Database Inspector Modal */}
@@ -581,7 +513,21 @@ export default function App() {
         onClose={() => setIsDBModalOpen(false)}
         tasks={tasks}
         onSeedData={handleSeedData}
-        onResetDB={handleResetDB}
+        onResetDB={() => handleResetDB(setIsDBModalOpen)}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        notificationsEnabled={notificationsEnabled}
+        onToggleNotifications={() => setNotificationsEnabled(prev => {
+          const next = !prev;
+          try {
+            localStorage.setItem('notifications_enabled', JSON.stringify(next));
+          } catch {}
+          return next;
+        })}
       />
 
       {/* Toast Notification Container */}

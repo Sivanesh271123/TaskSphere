@@ -10,7 +10,10 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import taskRoutes from './routes/taskRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import { initializeDatabase } from './config/db.js';
+import { initCronScheduler } from './services/cronScheduler.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -30,11 +33,19 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Security middleware
-// app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false
+}));
 app.use(cors({
   origin: (origin, callback) => {
-    console.log("Origin:", origin);
-    callback(null, true);
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.startsWith('http://localhost:') || 
+                      origin.startsWith('http://127.0.0.1:');
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
@@ -43,23 +54,14 @@ app.use(express.json());
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.resolve(__dirname, '../dist');
-  
-  app.use((req,res,next)=>{
-    console.log("[BEFORE STATIC]", req.method, req.path);
-    next();
-  });
-
   app.use(express.static(distPath));
-
-  app.use((req,res,next)=>{
-    console.log("[AFTER STATIC]", req.method, req.path);
-    next();
-  });
 }
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Wildcard handler for client-side routing in production
 if (process.env.NODE_ENV === 'production') {
@@ -106,6 +108,9 @@ app.use((err, req, res, next) => {
 async function start() {
   try {
     await initializeDatabase();
+    
+    // Initialize scheduled email reminders
+    initCronScheduler();
 
     app.listen(PORT, () => {
       console.log(`\n  ✨ TaskSphere API Server running on http://localhost:${PORT}`);
