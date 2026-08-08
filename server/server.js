@@ -21,20 +21,20 @@ import fs from 'fs';
 import dns from 'dns';
 import net from 'net';
 
-async function diagnoseSMTPPort465(host = 'smtp.gmail.com', port = 465) {
-  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Starting DNS & TCP test for ${host}:${port}...`);
+async function diagnoseSMTPPort(host = 'smtp.gmail.com', port = 465) {
+  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Testing ${host}:${port}...`);
 
   try {
     const addresses = await dns.promises.resolve4(host);
-    console.log(`  🔍 [SMTP DIAGNOSTIC] DNS A (IPv4) resolved for ${host}:`, addresses);
+    console.log(`  🔍 [SMTP DIAGNOSTIC] [Port ${port}] DNS A (IPv4) resolved for ${host}:`, addresses);
   } catch (err) {
-    console.error(`  ⚠️ [SMTP DIAGNOSTIC] DNS Resolution Failed for ${host}:`, err.message);
+    console.error(`  ⚠️ [SMTP DIAGNOSTIC] [Port ${port}] DNS Resolution Failed for ${host}:`, err.message);
   }
 
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(7000);
-    console.log(`  🔍 [SMTP DIAGNOSTIC] Attempting raw TCP socket connection to ${host}:${port}...`);
+    console.log(`  🔍 [SMTP DIAGNOSTIC] Attempting raw TCP socket connection to ${host}:${port} (7s timeout)...`);
 
     socket.on('connect', () => {
       console.log(`  ✅ [SMTP DIAGNOSTIC] Raw TCP socket CONNECTED to ${host}:${port} successfully!`);
@@ -56,6 +56,15 @@ async function diagnoseSMTPPort465(host = 'smtp.gmail.com', port = 465) {
 
     socket.connect(port, host);
   });
+}
+
+async function diagnoseSMTPPorts(host = 'smtp.gmail.com', ports = [465, 587]) {
+  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Starting DNS & TCP tests for host "${host}" on ports: ${ports.join(', ')}...`);
+  const results = {};
+  for (const port of ports) {
+    results[port] = await diagnoseSMTPPort(host, port);
+  }
+  return results;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -159,16 +168,14 @@ async function start() {
     // Initialize scheduled email reminders
     initCronScheduler();
 
-    // Verify Gmail SMTP (Port 465 SSL) configuration on startup
+    // Verify Gmail SMTP diagnostic on startup for ports 465 and 587
     try {
       const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-      const port = parseInt(process.env.EMAIL_PORT || '465', 10);
-      
-      await diagnoseSMTPPort465(host, port);
+      await diagnoseSMTPPorts(host, [465, 587]);
 
       const transporter = createTransporter();
       await transporter.verify();
-      console.log(`  📧 Gmail SMTP Server Verified: Successfully connected on Port ${port} (SSL)`);
+      console.log(`  📧 Gmail SMTP Transporter Verified: Successfully connected`);
     } catch (smtpErr) {
       console.error(`  ⚠️ Gmail SMTP Verification Warning:`, smtpErr.message || smtpErr);
     }
