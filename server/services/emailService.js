@@ -17,9 +17,13 @@ export async function getAccessToken() {
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    console.error('[EMAIL SERVICE ERROR] Missing required Gmail OAuth2 environment variables (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN).');
-    throw new Error('Gmail OAuth2 credentials are incomplete in environment configuration.');
+  if (
+    !clientId || clientId.includes('your_') ||
+    !clientSecret || clientSecret.includes('your_') ||
+    !refreshToken || refreshToken.includes('your_')
+  ) {
+    console.error('[EMAIL SERVICE ERROR] Gmail OAuth2 environment variables are missing or unconfigured in .env (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN).');
+    throw new Error('Gmail OAuth2 credentials are unconfigured in .env. Generate your refresh token at http://localhost:3000/oauth2login.');
   }
 
   const params = new URLSearchParams({
