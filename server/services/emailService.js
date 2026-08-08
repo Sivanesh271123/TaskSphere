@@ -74,7 +74,8 @@ export function createTransporter() {
     secure: port === 465,
     auth: { user, pass },
     connectionTimeout: 10000,
-    greetingTimeout: 10000
+    greetingTimeout: 10000,
+    family: 4 // Force IPv4 directly at the TCP socket layer
   });
 }
 
