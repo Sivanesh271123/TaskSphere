@@ -23,6 +23,7 @@ export default function TasksPage({
   onToggleComplete,
   onEdit,
   onDelete,
+  onSendEmailReminder,
   onClearCompleted,
   onOpenCreateModal,
   onSaveTask,
@@ -195,6 +196,7 @@ export default function TasksPage({
                     onToggleComplete={onToggleComplete}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onSendEmailReminder={onSendEmailReminder}
                   />
                 ))}
               </AnimatePresence>

@@ -16,14 +16,18 @@ function normalizeDate(dateStr) {
 }
 
 /**
- * Converts a HH:MM:SS or HH:MM string and a YYYY-MM-DD string into a valid local Date object.
+ * Converts a HH:MM:SS or HH:MM string and a YYYY-MM-DD string into a valid Date object.
+ * Adjusts for IST (GMT+5:30) user timezone offset relative to UTC server environment.
  */
 function parseDateTime(dateStr, timeStr) {
   if (!dateStr || !timeStr) return null;
   const [year, month, day] = dateStr.split('-').map(Number);
   const [hour, minute] = timeStr.split(':').map(Number);
-  // Months are 0-indexed in JS Date
-  return new Date(year, month - 1, day, hour, minute, 0);
+  if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute)) return null;
+  
+  // Assume user entered time in IST (GMT+5:30 = 330 minutes)
+  const utcMillis = Date.UTC(year, month - 1, day, hour, minute, 0) - (330 * 60 * 1000);
+  return new Date(utcMillis);
 }
 
 /**

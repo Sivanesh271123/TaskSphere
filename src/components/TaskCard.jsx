@@ -1,10 +1,10 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { Check, Edit2, Trash2, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { Check, Edit2, Trash2, Calendar, Clock, AlertCircle, Mail } from 'lucide-react';
 import { calculateTaskStatus, formatTime12Hour } from '../utils/statusHelper.js';
 
-const TaskCard = React.memo(function TaskCard({ task, onToggleComplete, onEdit, onDelete, categories = [] }) {
+const TaskCard = React.memo(function TaskCard({ task, onToggleComplete, onEdit, onDelete, onSendEmailReminder, categories = [] }) {
   const status = React.useMemo(() => calculateTaskStatus(task), [task]);
   const isOverdue = status === 'Overdue';
 
@@ -146,6 +146,18 @@ const TaskCard = React.memo(function TaskCard({ task, onToggleComplete, onEdit, 
         </div>
 
         <div className="task-actions">
+          {onSendEmailReminder && (
+            <button 
+              className="action-icon-btn" 
+              onClick={() => onSendEmailReminder(task)}
+              title="Send Email Reminder Now"
+              aria-label="Send Email Reminder"
+              style={{ color: 'var(--text-gold)' }}
+            >
+              <Mail size={14} aria-hidden="true" />
+            </button>
+          )}
+
           <button 
             className="action-icon-btn" 
             onClick={() => onEdit(task)}

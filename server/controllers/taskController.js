@@ -5,6 +5,7 @@
  */
 
 import TaskModel from '../models/taskModel.js';
+import { sendTaskReminderEmail } from '../services/emailService.js';
 
 // ─── Sanitization & Validation Helpers ───────────────────────────────────────
 const MAX_TITLE_LENGTH = 255;
@@ -251,5 +252,22 @@ export async function purgeAllTasks(req, res) {
   } catch (err) {
     console.error('PurgeAllTasks error:', err);
     res.status(500).json({ error: 'Failed to delete all tasks.' });
+  }
+}
+
+export async function sendTaskReminderNow(req, res) {
+  try {
+    const task = await TaskModel.getById(req.params.id, req.user.id);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found.' });
+    }
+
+    const subject = `Reminder: Task "${task.title}" ⚡`;
+    await sendTaskReminderEmail(req.user.email, subject, task, '30min');
+
+    res.json({ success: true, message: `Notification email sent to ${req.user.email}` });
+  } catch (err) {
+    console.error('SendTaskReminderNow error:', err);
+    res.status(500).json({ error: 'Failed to send notification email.' });
   }
 }

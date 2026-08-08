@@ -347,6 +347,24 @@ export default function App() {
       });
   }, [tasks, searchQuery, statusFilter, categoryFilter, sortBy]);
 
+  const handleSendEmailReminder = useCallback(async (task) => {
+    try {
+      addToast(`Sending email reminder for "${task.title}"...`, 'info');
+      const res = await fetch(`/api/tasks/${task.id}/send-reminder-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast(`📩 Email reminder sent to ${user?.email || 'your email'}!`, 'success');
+      } else {
+        addToast(data.error || 'Failed to send email reminder.', 'danger');
+      }
+    } catch (err) {
+      addToast('Failed to send email reminder.', 'danger');
+    }
+  }, [addToast, user]);
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -442,6 +460,7 @@ export default function App() {
                 onToggleComplete={(id) => handleToggleComplete(id, notificationsEnabled, notifyTaskCompleted)}
                 onEdit={(t) => { setTaskToEdit(t); setIsTaskModalOpen(true); }}
                 onDelete={handleDeleteTask}
+                onSendEmailReminder={handleSendEmailReminder}
                 onClearCompleted={handleClearCompleted}
                 onOpenCreateModal={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }}
                 onSaveTask={(data) => handleSaveTask(data, null, null)}
