@@ -1,5 +1,5 @@
 /**
- * TaskSphere Email Service (Resend Migration)
+ * TaskSphere Email Service (Resend Migration with Non-Hanging Timeout & Connectivity Diagnostics)
  * Handles dispatching sample test emails, password reset OTP emails,
  * and task reminder notifications via Resend's HTTPS API.
  */
@@ -37,6 +37,59 @@ function getResendClient() {
 }
 
 /**
+ * Executes a promise with an 8-second strict timeout to prevent API calls from hanging indefinitely.
+ * @param {Promise} promise 
+ * @param {number} ms 
+ * @returns {Promise}
+ */
+async function withTimeout(promise, ms = 8000) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const err = new Error(`Resend API request timed out after ${ms}ms`);
+      err.name = 'TimeoutError';
+      reject(err);
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Server-side connectivity test to verify Render host can reach api.resend.com.
+ */
+export async function diagnoseResendConnectivity() {
+  console.log(`[RESEND DIAGNOSTIC] Starting connectivity test to https://api.resend.com...`);
+  const startTime = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch('https://api.resend.com', {
+      method: 'GET',
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const elapsed = Date.now() - startTime;
+    console.log(`[RESEND DIAGNOSTIC] ✅ Host reachable in ${elapsed}ms! HTTP Status: ${res.status}`);
+    return true;
+  } catch (err) {
+    const elapsed = Date.now() - startTime;
+    console.error(`[RESEND DIAGNOSTIC ERROR] ❌ Failed to connect to https://api.resend.com after ${elapsed}ms:`, {
+      name: err.name,
+      message: err.message,
+      cause: err.cause,
+      code: err.code,
+      stack: err.stack
+    });
+    return false;
+  }
+}
+
+/**
  * Validates that the RESEND_API_KEY is present.
  * @throws {Error} if the key is missing.
  */
@@ -59,7 +112,7 @@ export async function sendTestEmail(toEmail) {
     throw new Error('Missing or invalid RESEND_API_KEY.');
   }
 
-  const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+  const from = process.env.EMAIL_FROM || 'TaskSphere <onboarding@resend.dev>';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -106,21 +159,36 @@ export async function sendTestEmail(toEmail) {
   `;
 
   try {
-    const { data, error } = await resend.emails.send({
-      from,
-      to: [toEmail],
-      subject: 'TaskSphere - Sample Test Email',
-      html: htmlContent
-    });
+    const { data, error } = await withTimeout(
+      resend.emails.send({
+        from,
+        to: [toEmail],
+        subject: 'TaskSphere - Sample Test Email',
+        html: htmlContent
+      }),
+      8000
+    );
 
     if (error) {
-      console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message || error);
+      console.error('[EMAIL SERVICE ERROR] Test email failed:', {
+        name: error.name,
+        message: error.message,
+        statusCode: error.statusCode,
+        cause: error.cause,
+        stack: error.stack
+      });
       throw new Error(error.message || 'Failed to send test email');
     }
     console.log(`[EMAIL SERVICE] Test email sent successfully to ${toEmail} (ID: ${data?.id})`);
     return data;
   } catch (error) {
-    console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message || error);
+    console.error('[EMAIL SERVICE ERROR] Test email exception:', {
+      name: error.name,
+      message: error.message,
+      statusCode: error.statusCode,
+      cause: error.cause,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -132,14 +200,17 @@ export async function sendTestEmail(toEmail) {
  */
 export async function sendPasswordResetOTP(email, otp) {
   const resend = getResendClient();
-  const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+  const from = process.env.EMAIL_FROM || 'TaskSphere <onboarding@resend.dev>';
 
-  console.log(`[EMAIL SERVICE DEBUG] Attempting OTP dispatch. Recipient: "${email}", From: "${from}"`);
+  console.log(`[EMAIL SERVICE DEBUG] Preparing OTP dispatch. Recipient: "${email}", From: "${from}"`);
 
   if (!resend) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}: RESEND_API_KEY is missing or placeholder.`);
     return false;
   }
+
+  // Run quick non-blocking connectivity check
+  await diagnoseResendConnectivity();
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -193,26 +264,46 @@ export async function sendPasswordResetOTP(email, otp) {
     </html>
   `;
 
-  try {
-    console.log(`[EMAIL SERVICE DEBUG] Executing resend.emails.send() for ${email}...`);
-    const { data, error } = await resend.emails.send({
-      from,
-      to: [email],
-      subject: 'TaskSphere Password Reset Verification Code',
-      html: htmlContent
-    });
+  const startTime = Date.now();
+  console.log(`[EMAIL SERVICE DEBUG] [START] Invoking resend.emails.send() with 8000ms timeout...`);
 
-    console.log("Resend response:", data);
+  try {
+    const { data, error } = await withTimeout(
+      resend.emails.send({
+        from,
+        to: [email],
+        subject: 'TaskSphere Password Reset Verification Code',
+        html: htmlContent
+      }),
+      8000
+    );
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[EMAIL SERVICE DEBUG] [FINISH] resend.emails.send() completed in ${elapsed}ms`);
+    console.log("Resend response data:", data);
 
     if (error) {
-      console.error("Resend error:", JSON.stringify(error, null, 2));
+      console.error("Resend API returned error:", {
+        name: error.name,
+        message: error.message,
+        statusCode: error.statusCode,
+        cause: error.cause,
+        stack: error.stack
+      });
       return false;
     }
 
     console.log(`[EMAIL SERVICE] Sent password reset OTP email to ${email} (ID: ${data?.id})`);
     return true;
   } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.stack || err.message || err);
+    const elapsed = Date.now() - startTime;
+    console.error(`[EMAIL SERVICE ERROR] resend.emails.send() failed after ${elapsed}ms:`, {
+      name: err.name,
+      message: err.message,
+      statusCode: err.statusCode,
+      cause: err.cause,
+      stack: err.stack
+    });
     return false;
   }
 }
@@ -226,7 +317,7 @@ export async function sendPasswordResetOTP(email, otp) {
  */
 export async function sendTaskReminderEmail(to, subject, taskData, type) {
   const resend = getResendClient();
-  const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+  const from = process.env.EMAIL_FROM || 'TaskSphere <onboarding@resend.dev>';
 
   if (!resend) {
     console.warn(`[EMAIL SERVICE] Skipping email reminder to ${to} (Missing RESEND_API_KEY).`);
@@ -262,28 +353,44 @@ export async function sendTaskReminderEmail(to, subject, taskData, type) {
   `;
 
   try {
-    const { data, error } = await resend.emails.send({
-      from,
-      to: [to],
-      subject,
-      html: htmlContent
-    });
+    const { data, error } = await withTimeout(
+      resend.emails.send({
+        from,
+        to: [to],
+        subject,
+        html: htmlContent
+      }),
+      8000
+    );
 
     if (error) {
-      console.error(`[EMAIL SERVICE ERROR] Resend API rejected reminder email to ${to}:`, error.message || error);
+      console.error(`[EMAIL SERVICE ERROR] Resend API rejected reminder email to ${to}:`, {
+        name: error.name,
+        message: error.message,
+        statusCode: error.statusCode,
+        cause: error.cause,
+        stack: error.stack
+      });
       return;
     }
 
     console.log(`[EMAIL SERVICE] Sent ${type} reminder to ${to} for task "${taskData.title}" (ID: ${data?.id})`);
   } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send email to ${to}:`, err.message || err);
+    console.error(`[EMAIL SERVICE ERROR] Failed to send email to ${to}:`, {
+      name: err.name,
+      message: err.message,
+      statusCode: err.statusCode,
+      cause: err.cause,
+      stack: err.stack
+    });
   }
 }
 
 const EmailService = {
   sendTestEmail,
   sendPasswordResetOTP,
-  sendTaskReminderEmail
+  sendTaskReminderEmail,
+  diagnoseResendConnectivity
 };
 
 export default EmailService;
