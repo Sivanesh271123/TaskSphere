@@ -15,6 +15,7 @@ import { notifyTaskCompleted } from './utils/notificationService.js';
 import HomePage from './pages/HomePage';
 const TasksPage = lazy(() => import('./pages/TasksPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 
 // Custom Hooks
@@ -456,6 +457,13 @@ export default function App() {
                 notifications={notifications}
               />
             )}
+
+            {activePage === 'about' && (
+              <AboutPage 
+                key="about"
+                onNavigateToTasks={() => setActivePage('tasks')}
+              />
+            )}
           </AnimatePresence>
         </Suspense>
       </div>
@@ -528,6 +536,7 @@ export default function App() {
           } catch {}
           return next;
         })}
+        onNavigateAbout={() => setActivePage('about')}
       />
 
       {/* Toast Notification Container */}

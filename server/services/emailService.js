@@ -5,6 +5,7 @@
  */
 
 import dotenv from 'dotenv';
+import * as Brevo from '@getbrevo/brevo';
 
 dotenv.config();
 
@@ -251,15 +252,55 @@ export async function sendPasswordResetOTP(email, otp) {
   `;
 
   try {
-    console.log(`[EMAIL SERVICE] Dispatching password reset OTP email via Gmail API HTTPS...`);
-    const data = await sendEmailViaGmailAPI({
-      from,
-      to: email,
-      subject: 'TaskSphere Password Reset Verification Code',
-      html: htmlContent
-    });
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.SENDER_EMAIL || process.env.GMAIL_USER || 'sivanesh.e.m@gmail.com';
 
-    console.log(`[EMAIL SERVICE] Password reset OTP email sent successfully (Gmail API Message ID: ${data.id})`);
+    if (brevoApiKey && !brevoApiKey.includes('your_')) {
+      console.log(`[EMAIL SERVICE] Dispatching password reset OTP email via Brevo Transactional Email API to ${email}...`);
+      const brevoResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': brevoApiKey,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'TaskSphere Security', email: senderEmail },
+          to: [{ email: email }],
+          replyTo: { email: senderEmail },
+          subject: 'TaskSphere Password Reset Verification Code ⚡',
+          htmlContent: htmlContent
+        })
+      });
+
+      const brevoData = await brevoResponse.json();
+      if (brevoResponse.ok) {
+        console.log(`[EMAIL SERVICE] Password reset OTP email sent successfully via Brevo API (Message ID: ${brevoData.messageId})`);
+        return true;
+      }
+      console.error(`[EMAIL SERVICE ERROR] Brevo API HTTP ${brevoResponse.status}:`, brevoData);
+    }
+
+    // Check if Gmail API OAuth2 credentials are configured
+    const gmailClientId = process.env.GMAIL_CLIENT_ID;
+    if (gmailClientId && !gmailClientId.includes('your_')) {
+      console.log(`[EMAIL SERVICE] Dispatching password reset OTP email via Gmail API HTTPS...`);
+      const data = await sendEmailViaGmailAPI({
+        from,
+        to: email,
+        subject: 'TaskSphere Password Reset Verification Code',
+        html: htmlContent
+      });
+
+      console.log(`[EMAIL SERVICE] Password reset OTP email sent successfully (Gmail API Message ID: ${data.id})`);
+      return true;
+    }
+
+    // Development / Local Testing Fallback: Log OTP to console when API keys are not set yet
+    console.log(`\n===========================================================`);
+    console.log(`🔑 [DEV MODE] OTP Generated for ${email}: ${otp}`);
+    console.log(`📌 To send real emails, set a valid BREVO_API_KEY in .env`);
+    console.log(`===========================================================\n`);
     return true;
   } catch (err) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP:`, err.message || err);
@@ -267,58 +308,115 @@ export async function sendPasswordResetOTP(email, otp) {
   }
 }
 
-/**
- * Sends a stylized HTML email task reminder via Gmail API HTTPS.
- * @param {string} to - Recipient email address
- * @param {string} subject - Email subject
- * @param {Object} taskData - Task details object
- * @param {string} type - Reminder type ('30min', '1day', 'overdue')
- * @returns {Promise<boolean>}
- */
 export async function sendTaskReminderEmail(to, subject, taskData, type) {
+  const brevoApiKey = process.env.BREVO_API_KEY;
   const gmailUser = process.env.GMAIL_USER || process.env.EMAIL_USER;
-  const from = process.env.EMAIL_FROM || (gmailUser ? `TaskSphere <${gmailUser}>` : 'TaskSphere');
-  const appUrl = process.env.APP_URL || 'http://localhost:5173';
+  const senderEmail = process.env.SENDER_EMAIL || (gmailUser ? `TaskSphere <${gmailUser}>` : 'sivanesh.e.m@gmail.com');
+  const appUrl = process.env.APP_URL || 'http://localhost:3000';
   
   let headerColor = '#3b82f6';
-  let typeLabel = 'Upcoming Task';
+  let typeLabel = 'Upcoming Task Reminder';
   
   if (type === '30min') {
     headerColor = '#f97316';
-    typeLabel = 'Due in 30 Minutes';
+    typeLabel = '⏰ Task Due in 30 Minutes';
   } else if (type === 'overdue') {
     headerColor = '#ef4444';
-    typeLabel = 'Task Overdue';
+    typeLabel = '🚨 Task Overdue Notice';
   }
 
   const htmlContent = `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb; border-radius: 8px;">
-      <div style="background-color: ${headerColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-        <h1 style="margin: 0; font-size: 24px;">TaskSphere Reminder</h1>
-        <p style="margin: 5px 0 0 0; opacity: 0.9;">${typeLabel}</p>
-      </div>
-      <div style="background-color: white; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-        <h2 style="margin-top: 0; color: #1f2937;">${taskData.title}</h2>
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="${appUrl}" style="display: inline-block; background-color: #3b82f6; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">Open in TaskSphere</a>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>TaskSphere Reminder</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #0e0e10; color: #ffffff; }
+        .card { max-width: 520px; margin: 0 auto; background: #17171b; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .header { background: ${headerColor}; padding: 24px; text-align: center; color: white; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 800; }
+        .header p { margin: 6px 0 0 0; opacity: 0.9; font-size: 14px; }
+        .body { padding: 30px; text-align: center; }
+        .task-title { font-size: 20px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0; }
+        .task-details { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 16px; font-size: 14px; color: #b3b3b3; margin-bottom: 24px; text-align: left; }
+        .btn { display: inline-block; background-color: #4f46e5; color: white; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 15px; }
+        .footer { font-size: 12px; color: #666; text-align: center; padding: 16px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <h1>⚡ TaskSphere</h1>
+          <p>${typeLabel}</p>
         </div>
+        <div class="body">
+          <div class="task-title">${taskData.title || 'Untitled Task'}</div>
+          <div class="task-details">
+            📅 <strong>Due Date:</strong> ${taskData.dueDate || 'Today'}<br>
+            ⏰ <strong>Due Time:</strong> ${taskData.dueTime || 'Not set'}<br>
+            📌 <strong>Priority:</strong> ${taskData.priority || 'Medium'}
+          </div>
+          <a href="${appUrl}" class="btn">Open TaskSphere Dashboard</a>
+        </div>
+        <div class="footer">&copy; TaskSphere Productivity Workspace</div>
       </div>
-    </div>
+    </body>
+    </html>
   `;
 
-  try {
-    const data = await sendEmailViaGmailAPI({
-      from,
-      to,
-      subject,
-      html: htmlContent
-    });
-    console.log(`[EMAIL SERVICE] Sent ${type} reminder for task "${taskData.title}" (Gmail API Message ID: ${data.id})`);
-    return true;
-  } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send reminder email:`, err.message || err);
-    return false;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    try {
+      console.log(`[EMAIL SERVICE] Dispatching ${type} task reminder email to ${to} via Brevo API...`);
+      const brevoResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': brevoApiKey,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'TaskSphere Reminders', email: 'sivanesh.e.m@gmail.com' },
+          to: [{ email: to }],
+          replyTo: { email: 'sivanesh.e.m@gmail.com' },
+          subject: subject,
+          htmlContent: htmlContent
+        })
+      });
+
+      const brevoData = await brevoResponse.json();
+      if (brevoResponse.ok) {
+        console.log(`[EMAIL SERVICE] ${type} task reminder email sent via Brevo API (Message ID: ${brevoData.messageId})`);
+        return true;
+      }
+      console.error(`[EMAIL SERVICE ERROR] Brevo API HTTP ${brevoResponse.status}:`, brevoData);
+    } catch (err) {
+      console.error(`[EMAIL SERVICE ERROR] Brevo dispatch error:`, err.message || err);
+    }
   }
+
+  // Fallback to Gmail API if configured
+  const gmailClientId = process.env.GMAIL_CLIENT_ID;
+  if (gmailClientId && !gmailClientId.includes('your_')) {
+    try {
+      const data = await sendEmailViaGmailAPI({
+        from: senderEmail,
+        to,
+        subject,
+        html: htmlContent
+      });
+      console.log(`[EMAIL SERVICE] Sent ${type} reminder for task "${taskData.title}" (Gmail API Message ID: ${data.id})`);
+      return true;
+    } catch (err) {
+      console.error(`[EMAIL SERVICE ERROR] Failed to send reminder email via Gmail:`, err.message || err);
+      return false;
+    }
+  }
+
+  console.log(`\n===========================================================`);
+  console.log(`🔔 [REMINDER DEV MODE] ${typeLabel} for ${to}: "${taskData.title}"`);
+  console.log(`===========================================================\n`);
+  return true;
 }
 
 const EmailService = {

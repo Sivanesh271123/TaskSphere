@@ -35,3 +35,22 @@ export function calculateTaskStatus(task, referenceTime = new Date()) {
   // 6. Upcoming state: due date is in the future
   return 'Upcoming';
 }
+
+/**
+ * Formats a 24-hour time string (e.g., "14:30" or "14:30:00") into 12-hour format with AM/PM (e.g., "2:30 PM").
+ */
+export function formatTime12Hour(timeStr) {
+  if (!timeStr) return '';
+  const parts = String(timeStr).split(':');
+  if (parts.length < 2) return timeStr;
+
+  let hours = parseInt(parts[0], 10);
+  const minutes = parts[1].substring(0, 2);
+  if (isNaN(hours)) return timeStr;
+
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // Hour 0 is 12 AM
+
+  return `${hours}:${minutes} ${ampm}`;
+}

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { calculateTaskStatus } from '../utils/statusHelper.js';
+import { calculateTaskStatus, formatTime12Hour } from '../utils/statusHelper.js';
 import { Edit3, CheckCircle2, Check, Clock, Calendar as CalendarIcon, Tag, Plus, X, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function CalendarView({ tasks, categories = [], onEdit, onToggleComplete, onSaveTask, onRescheduleTask, onOpenCreateModal }) {
@@ -685,7 +685,7 @@ export default function CalendarView({ tasks, categories = [], onEdit, onToggleC
                             background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-muted)',
                             fontWeight: 600
                           }}>
-                            <Clock size={11} /> {t.dueTime.substring(0, 5)}
+                            <Clock size={11} /> {formatTime12Hour(t.dueTime)}
                           </span>
                         )}
                       </div>
@@ -829,7 +829,7 @@ export default function CalendarView({ tasks, categories = [], onEdit, onToggleC
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                             {t.dueTime && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                                <Clock size={10} /> {t.dueTime.substring(0, 5)}
+                                <Clock size={10} /> {formatTime12Hour(t.dueTime)}
                               </span>
                             )}
                             <span style={{ color: statusStyle.color, fontWeight: 700 }}>
@@ -906,7 +906,7 @@ export default function CalendarView({ tasks, categories = [], onEdit, onToggleC
                     {/* Time Column */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-gold)', fontWeight: 800, fontSize: '0.95rem' }}>
                       <Clock size={16} />
-                      <span>{t.dueTime ? t.dueTime.substring(0, 5) : 'All Day'}</span>
+                      <span>{t.dueTime ? formatTime12Hour(t.dueTime) : 'All Day'}</span>
                     </div>
 
                     {/* Title & Badges Column */}

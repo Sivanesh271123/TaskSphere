@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { Check, Edit2, Trash2, Calendar, Clock, AlertCircle } from 'lucide-react';
-import { calculateTaskStatus } from '../utils/statusHelper.js';
+import { calculateTaskStatus, formatTime12Hour } from '../utils/statusHelper.js';
 
 const TaskCard = React.memo(function TaskCard({ task, onToggleComplete, onEdit, onDelete, categories = [] }) {
   const status = React.useMemo(() => calculateTaskStatus(task), [task]);
@@ -135,9 +135,9 @@ const TaskCard = React.memo(function TaskCard({ task, onToggleComplete, onEdit, 
               <Calendar size={14} className="icon-calendar" />
               <span>{task.dueDate}</span>
               {task.dueTime && (
-                <span className="meta-chip-time" style={{ marginLeft: 4 }} title={`Due Time: ${task.dueTime}`}>
+                <span className="meta-chip-time" style={{ marginLeft: 4 }} title={`Due Time: ${formatTime12Hour(task.dueTime)}`}>
                   <Clock size={14} className="icon-clock" />
-                  <span>{task.dueTime.substring(0, 5)}</span>
+                  <span>{formatTime12Hour(task.dueTime)}</span>
                 </span>
               )}
               {isOverdue && <AlertCircle size={14} className="icon-overdue" style={{ marginLeft: 2 }} />}

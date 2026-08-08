@@ -5,7 +5,7 @@ import {
   Clock, Zap, RefreshCw, ChevronRight, Target, ShieldCheck,
   ListTodo, AlertCircle, CalendarRange
 } from 'lucide-react';
-import { calculateTaskStatus } from '../utils/statusHelper.js';
+import { calculateTaskStatus, formatTime12Hour } from '../utils/statusHelper.js';
 
 function AnimatedNumber({ value, duration = 800 }) {
   const [displayValue, setDisplayValue] = useState(0);
@@ -42,7 +42,33 @@ const MOTIVATIONAL_QUOTES = [
   "Focus on being productive instead of busy.",
   "Your future self will thank you for the effort you put in today.",
   "Action is the foundational key to all success.",
-  "Don't wait for opportunity. Create it step by step."
+  "Don't wait for opportunity. Create it step by step.",
+  "Success is the sum of small efforts repeated day in and day out.",
+  "Discipline is choosing between what you want now and what you want most.",
+  "The secret of getting ahead is getting started.",
+  "Excellence is not an act, but a daily habit.",
+  "You don't have to be great to start, but you have to start to be great.",
+  "Great things are done by a series of small things brought together.",
+  "Consistency is what transforms average into extraordinary.",
+  "Focus on progress, not perfection.",
+  "Start where you are. Use what you have. Do what you can.",
+  "It always seems impossible until it's done.",
+  "Your habits shape your future; cultivate ones that elevate you.",
+  "Energy flows where attention goes. Direct your focus wisely.",
+  "Mastering your time is mastering your life.",
+  "Dream big, execute daily, stay persistent.",
+  "One hour of focused work beats eight hours of distracted activity.",
+  "Clarity breeds momentum; define your next small step.",
+  "Small wins fuel big breakthroughs. Keep building!",
+  "Believe in your potential and commit to the process.",
+  "Turn your intentions into actions and your actions into habits.",
+  "Productivity is never an accident; it is the result of commitment.",
+  "The best time to plant a tree was 20 years ago. The second best time is now.",
+  "Set high standards, build steady habits, and watch yourself thrive.",
+  "Make each day your masterpiece through intentional effort.",
+  "Doubt kills more dreams than failure ever will. Take the leap.",
+  "Organize your day, elevate your focus, and achieve your goals.",
+  "Every completed task is a victory on your path to greatness."
 ];
 
 export default function HomePage({ 
@@ -55,7 +81,10 @@ export default function HomePage({
   onOpenDBModal,
   onToggleComplete 
 }) {
-  const [quoteIdx, setQuoteIdx] = useState(0);
+  const [quoteIdx, setQuoteIdx] = useState(() => {
+    const day = new Date().getDate();
+    return (day - 1) % MOTIVATIONAL_QUOTES.length;
+  });
 
   const total = tasks.length;
   const completed = tasks.filter(t => t.completed).length;
@@ -350,7 +379,7 @@ export default function HomePage({
                         <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{t.title}</span>
                         {t.dueDate && (
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            Due: {t.dueDate}{t.dueTime ? ` @ ${t.dueTime.substring(0, 5)}` : ''}
+                            Due: {t.dueDate}{t.dueTime ? ` @ ${formatTime12Hour(t.dueTime)}` : ''}
                           </span>
                         )}
                       </div>

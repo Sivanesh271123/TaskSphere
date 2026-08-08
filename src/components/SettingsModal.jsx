@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell, BellRing, Settings, AlertTriangle } from 'lucide-react';
+import { X, Bell, BellRing, Settings, AlertTriangle, Info, ArrowRight } from 'lucide-react';
 import { requestNotificationPermission } from '../utils/notificationService';
 import useFocusTrap from '../hooks/useFocusTrap.js';
 
@@ -8,7 +8,8 @@ export default function SettingsModal({
   isOpen, 
   onClose, 
   notificationsEnabled, 
-  onToggleNotifications 
+  onToggleNotifications,
+  onNavigateAbout
 }) {
   const modalRef = useFocusTrap(isOpen, onClose);
   const [permissionState, setPermissionState] = useState(
@@ -146,6 +147,37 @@ export default function SettingsModal({
                 </span>
               </div>
             )}
+
+            {/* Settings -> About TaskSphere Row */}
+            <div style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+              background: 'var(--surface-subtle)', padding: '1rem', 
+              borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Info size={20} style={{ color: 'var(--accent-gold-main)' }} />
+                <div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    About TaskSphere
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Mission, features & founder details
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                className="btn btn-secondary"
+                onClick={() => {
+                  onClose();
+                  if (onNavigateAbout) onNavigateAbout();
+                }}
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <span>View About Page</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>

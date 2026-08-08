@@ -39,3 +39,6 @@ cookiejar.txt
 
 # Copilot logs/caches
 .copilot/
+
+# Temporary test scripts
+scratch/

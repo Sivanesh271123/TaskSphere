@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Plus, LayoutList, Kanban, Calendar, BarChart3, 
-  Database, Sun, Moon, Download, Sparkles 
+  Database, Sun, Moon, Download, Sparkles, Info 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useFocusTrap from '../hooks/useFocusTrap.js';
@@ -24,6 +24,7 @@ export default function CommandPalette({
     { id: 'v-kanban', title: 'Switch to Kanban Board View', icon: <Kanban size={16} />, action: () => { onViewChange('kanban'); onClose(); } },
     { id: 'v-calendar', title: 'Switch to Calendar View', icon: <Calendar size={16} />, action: () => { onViewChange('calendar'); onClose(); } },
     { id: 'v-analytics', title: 'Switch to Analytics View', icon: <BarChart3 size={16} />, action: () => { onViewChange('analytics'); onClose(); } },
+    { id: 'v-about', title: 'About TaskSphere (Mission, Features & Founder)', icon: <Info size={16} />, action: () => { onViewChange('about'); onClose(); } },
     { id: 'theme', title: 'Toggle Light / Dark Theme', icon: <Sun size={16} />, action: () => { onToggleTheme(); onClose(); } },
     { id: 'db', title: 'Open Database Inspector', icon: <Database size={16} />, action: () => { onOpenDBModal(); onClose(); } }
   ];

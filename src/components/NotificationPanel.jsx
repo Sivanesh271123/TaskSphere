@@ -113,7 +113,7 @@ export default function NotificationPanel({ isOpen, onClose, notifications, hasM
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                        {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                       </span>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         {!notif.isRead && (

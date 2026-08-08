@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Save } from 'lucide-react';
 import useFocusTrap from '../hooks/useFocusTrap.js';
+import { formatTime12Hour } from '../utils/statusHelper.js';
 
 export default function TaskFormModal({ isOpen, onClose, onSave, taskToEdit, categories = [], onCreateCategory }) {
   const [title, setTitle] = useState('');
@@ -173,7 +174,9 @@ export default function TaskFormModal({ isOpen, onClose, onSave, taskToEdit, cat
               </div>
 
               <div className="form-group">
-                <label htmlFor="taskDueTime">Due Time</label>
+                <label htmlFor="taskDueTime">
+                  Due Time {dueTime && <span style={{ fontSize: '0.8em', color: 'var(--text-gold, #d4af37)', marginLeft: 6 }}>({formatTime12Hour(dueTime)})</span>}
+                </label>
                 <input 
                   id="taskDueTime"
                   type="time" 
