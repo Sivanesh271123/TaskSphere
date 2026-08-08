@@ -9,6 +9,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log("[DEBUG] RESEND_API_KEY exists:", !!process.env.RESEND_API_KEY);
+console.log(
+  "[DEBUG] RESEND_API_KEY prefix:",
+  process.env.RESEND_API_KEY
+    ? process.env.RESEND_API_KEY.substring(0, 5)
+    : "undefined"
+);
+
 // Initialize Resend SDK
 const resend = new Resend(process.env.RESEND_API_KEY);
 
