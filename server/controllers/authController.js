@@ -214,18 +214,21 @@ let forgotPasswordRequestCounter = 0;
 const otpRequestLocks = new Map(); // normalizedEmail -> timestamp
 
 export async function forgotPassword(req, res) {
+  console.log(`\n[FORGOT DEBUG 1] Controller entered`);
   try {
     forgotPasswordRequestCounter++;
     const requestId = forgotPasswordRequestCounter;
     const timestamp = new Date().toISOString();
-    console.log(`\n[FORGOT PASSWORD AUDIT] Request #${requestId} received at ${timestamp} for email: "${req.body?.email}"`);
+    console.log(`[FORGOT PASSWORD AUDIT] Request #${requestId} received at ${timestamp} for email: "${req.body?.email}"`);
     const { email } = req.body;
 
     if (!email?.trim() || !EMAIL_REGEX.test(email.trim())) {
+      console.log(`[FORGOT DEBUG INVALID EMAIL] Email failed regex validation: "${email}"`);
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    console.log(`[FORGOT DEBUG 2] Email normalized: "${normalizedEmail}"`);
 
     // Deduplicate concurrent requests hitting backend within 5 seconds
     const now = Date.now();
@@ -238,12 +241,15 @@ export async function forgotPassword(req, res) {
     }
     otpRequestLocks.set(normalizedEmail, now);
 
+    console.log(`[FORGOT DEBUG 3] About to find user with email "${normalizedEmail}"`);
     const user = await UserModel.findByEmail(normalizedEmail);
+    console.log(`[FORGOT DEBUG 4] User lookup completed for "${normalizedEmail}"`);
 
     if (!user) {
-      console.log(`[FORGOT PASSWORD] No user account found for email: "${normalizedEmail}"`);
+      console.log(`[FORGOT DEBUG 5] User found: false (No matching account for "${normalizedEmail}")`);
     } else {
-      console.log(`[FORGOT PASSWORD] User account found (ID: ${user.id}) for email: "${normalizedEmail}"`);
+      console.log(`[FORGOT DEBUG 5] User found: true (ID: ${user.id})`);
+      
       // Check if user already has an active, unexpired OTP (valid for 10 mins) with < 5 attempts
       const hasActiveOTP = user.reset_otp && 
                            user.reset_otp_expires && 
@@ -254,40 +260,37 @@ export async function forgotPassword(req, res) {
       let expiresAt;
 
       if (hasActiveOTP) {
-        // Reuse the existing active OTP code so the user receives ONLY ONE consistent code!
         otp = user.reset_otp;
         expiresAt = user.reset_otp_expires;
-        console.log(`[FORGOT PASSWORD] Reusing active OTP "${otp}" for ${normalizedEmail} (Expires: ${expiresAt})`);
+        console.log(`[FORGOT DEBUG 7] Reusing active OTP "${otp}" for ${normalizedEmail} (Expires: ${expiresAt})`);
       } else {
-        // Generate a new crypto-secure 6-digit OTP only if no active unexpired OTP exists
+        console.log(`[FORGOT DEBUG 6] About to generate OTP`);
         otp = crypto.randomInt(100000, 1000000).toString();
         expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        console.log(`[FORGOT DEBUG 7] OTP generated: "${otp}" (Expires: ${expiresAt})`);
+
+        console.log(`[FORGOT DEBUG 8] About to save OTP to database for User ID ${user.id}`);
         await UserModel.setResetOTP(user.id, otp, expiresAt);
-        console.log(`[FORGOT PASSWORD] Generated new OTP "${otp}" for ${normalizedEmail}`);
+        console.log(`[FORGOT DEBUG 9] OTP saved successfully in database`);
       }
 
-      try {
-        console.log(`[FORGOT PASSWORD] Dispatching sendPasswordResetOTP to "${normalizedEmail}" with OTP "${otp}"`);
-        const isSent = await sendPasswordResetOTP(normalizedEmail, otp);
-        console.log(`[FORGOT PASSWORD] sendPasswordResetOTP result for "${normalizedEmail}": ${isSent}`);
+      console.log(`[FORGOT DEBUG 10] About to call sendPasswordResetOTP for "${normalizedEmail}"`);
+      const isSent = await sendPasswordResetOTP(normalizedEmail, otp);
+      console.log(`[FORGOT DEBUG 11] sendPasswordResetOTP returned: ${isSent}`);
 
-        if (!isSent) {
-          console.error(`[FORGOT PASSWORD ERROR] sendPasswordResetOTP returned false for "${normalizedEmail}"`);
-          return res.status(500).json({ error: 'Failed to send verification email. Please check server logs or email settings.' });
-        }
-      } catch (emailErr) {
-        console.error('[AUTH ERROR] Exception thrown during sendPasswordResetOTP:', emailErr.stack || emailErr.message);
-        return res.status(500).json({ error: 'Unable to send verification email due to server error.' });
+      if (!isSent) {
+        console.error(`[FORGOT DEBUG ERROR] sendPasswordResetOTP failed for "${normalizedEmail}"`);
+        return res.status(500).json({ error: 'Failed to send verification email. Please check server logs or email settings.' });
       }
     }
 
-    // Always return a generic success message to prevent user enumeration
+    console.log(`[FORGOT DEBUG 12] Sending response`);
     return res.json({
       message: 'If an account exists with this email, a verification code has been generated.'
     });
   } catch (err) {
-    console.error('Forgot password error:', err);
-    return res.status(500).json({ error: 'Failed to process request.' });
+    console.error(`[FORGOT CATCH ERROR] Unhandled exception in forgotPassword controller:`, err.stack || err);
+    return res.status(500).json({ error: 'Failed to process request due to an internal server error.' });
   }
 }
 
