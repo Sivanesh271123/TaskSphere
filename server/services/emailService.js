@@ -134,6 +134,8 @@ export async function sendPasswordResetOTP(email, otp) {
   const resend = getResendClient();
   const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
+  console.log(`[EMAIL SERVICE DEBUG] Attempting OTP dispatch. Recipient: "${email}", From: "${from}"`);
+
   if (!resend) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}: RESEND_API_KEY is missing or placeholder.`);
     return false;
@@ -192,6 +194,7 @@ export async function sendPasswordResetOTP(email, otp) {
   `;
 
   try {
+    console.log(`[EMAIL SERVICE DEBUG] Executing resend.emails.send() for ${email}...`);
     const { data, error } = await resend.emails.send({
       from,
       to: [email],
@@ -199,15 +202,17 @@ export async function sendPasswordResetOTP(email, otp) {
       html: htmlContent
     });
 
+    console.log("Resend response:", data);
+
     if (error) {
-      console.error(`[EMAIL SERVICE ERROR] Resend API rejected password reset email to ${email}:`, error.message || error);
+      console.error("Resend error:", JSON.stringify(error, null, 2));
       return false;
     }
 
     console.log(`[EMAIL SERVICE] Sent password reset OTP email to ${email} (ID: ${data?.id})`);
     return true;
   } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.message || err);
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.stack || err.message || err);
     return false;
   }
 }
