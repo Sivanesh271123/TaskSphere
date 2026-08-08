@@ -18,6 +18,45 @@ import { createTransporter } from './services/emailService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import dns from 'dns';
+import net from 'net';
+
+async function diagnoseSMTPPort465(host = 'smtp.gmail.com', port = 465) {
+  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Starting DNS & TCP test for ${host}:${port}...`);
+
+  try {
+    const addresses = await dns.promises.resolve4(host);
+    console.log(`  🔍 [SMTP DIAGNOSTIC] DNS A (IPv4) resolved for ${host}:`, addresses);
+  } catch (err) {
+    console.error(`  ⚠️ [SMTP DIAGNOSTIC] DNS Resolution Failed for ${host}:`, err.message);
+  }
+
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(7000);
+    console.log(`  🔍 [SMTP DIAGNOSTIC] Attempting raw TCP socket connection to ${host}:${port}...`);
+
+    socket.on('connect', () => {
+      console.log(`  ✅ [SMTP DIAGNOSTIC] Raw TCP socket CONNECTED to ${host}:${port} successfully!`);
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.on('timeout', () => {
+      console.error(`  ⚠️ [SMTP DIAGNOSTIC] Raw TCP socket TIMEOUT after 7000ms connecting to ${host}:${port}`);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.on('error', (err) => {
+      console.error(`  ⚠️ [SMTP DIAGNOSTIC] Raw TCP socket ERROR on ${host}:${port}:`, err.message);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.connect(port, host);
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,9 +161,14 @@ async function start() {
 
     // Verify Gmail SMTP (Port 465 SSL) configuration on startup
     try {
+      const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+      const port = parseInt(process.env.EMAIL_PORT || '465', 10);
+      
+      await diagnoseSMTPPort465(host, port);
+
       const transporter = createTransporter();
       await transporter.verify();
-      console.log(`  📧 Gmail SMTP Server Verified: Successfully connected on Port 465 (SSL)`);
+      console.log(`  📧 Gmail SMTP Server Verified: Successfully connected on Port ${port} (SSL)`);
     } catch (smtpErr) {
       console.error(`  ⚠️ Gmail SMTP Verification Warning:`, smtpErr.message || smtpErr);
     }
