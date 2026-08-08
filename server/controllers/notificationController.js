@@ -73,7 +73,7 @@ export async function deleteNotification(req, res) {
 }
 
 /**
- * Controller to trigger a sample test email via Nodemailer
+ * Controller to trigger a sample test email via Resend HTTP API
  */
 export async function sendTestEmailController(req, res) {
   try {
