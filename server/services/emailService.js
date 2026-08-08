@@ -85,16 +85,20 @@ export async function sendTestEmail(toEmail) {
   `;
 
   try {
-    const data = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: [toEmail],
       subject: 'TaskSphere - Sample Test Email',
       html: htmlContent
     });
-    console.log(`[EMAIL SERVICE] Test email sent successfully to ${toEmail} (ID: ${data.id})`);
+    if (error) {
+      console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message || error);
+      throw new Error(error.message || 'Failed to send test email');
+    }
+    console.log(`[EMAIL SERVICE] Test email sent successfully to ${toEmail} (ID: ${data?.id})`);
     return data;
   } catch (error) {
-    console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message);
+    console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message || error);
     throw error;
   }
 }
@@ -166,16 +170,22 @@ export async function sendPasswordResetOTP(email, otp) {
   `;
 
   try {
-    const data = await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: [email],
       subject: 'TaskSphere Password Reset Verification Code',
       html: htmlContent
     });
-    console.log(`[EMAIL SERVICE] Sent password reset OTP email to ${email}`);
+
+    if (error) {
+      console.error(`[EMAIL SERVICE ERROR] Resend API rejected password reset email to ${email}:`, error.message || error);
+      return false;
+    }
+
+    console.log(`[EMAIL SERVICE] Sent password reset OTP email to ${email} (ID: ${data?.id})`);
     return true;
   } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.message);
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.message || err);
     return false;
   }
 }
@@ -225,15 +235,19 @@ export async function sendTaskReminderEmail(to, subject, taskData, type) {
   `;
 
   try {
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from,
       to: [to],
       subject,
       html: htmlContent
     });
-    console.log(`[EMAIL SERVICE] Sent ${type} reminder to ${to} for task "${taskData.title}"`);
+    if (error) {
+      console.error(`[EMAIL SERVICE ERROR] Resend API rejected reminder email to ${to}:`, error.message || error);
+      return;
+    }
+    console.log(`[EMAIL SERVICE] Sent ${type} reminder to ${to} for task "${taskData.title}" (ID: ${data?.id})`);
   } catch (err) {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send email to ${to}:`, err.message);
+    console.error(`[EMAIL SERVICE ERROR] Failed to send email to ${to}:`, err.message || err);
   }
 }
 
