@@ -9,16 +9,32 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-console.log("[DEBUG] RESEND_API_KEY exists:", !!process.env.RESEND_API_KEY);
-console.log(
-  "[DEBUG] RESEND_API_KEY prefix:",
-  process.env.RESEND_API_KEY
-    ? process.env.RESEND_API_KEY.substring(0, 5)
-    : "undefined"
-);
+let resendClientInstance = null;
 
-// Initialize Resend SDK
-const resend = new Resend(process.env.RESEND_API_KEY);
+/**
+ * Lazily retrieves or instantiates the Resend client instance.
+ * Avoids executing `new Resend()` at module import time so missing env vars won't crash process boot.
+ * @returns {Resend|null} Initialized Resend client or null if key is missing
+ */
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+
+  console.log("[DEBUG] RESEND_API_KEY exists:", !!apiKey);
+  console.log("[DEBUG] RESEND_API_KEY length:", apiKey?.length || 0);
+  console.log(
+    "[DEBUG] RESEND_API_KEY prefix:",
+    apiKey ? apiKey.substring(0, 5) : "undefined"
+  );
+
+  if (!apiKey || apiKey === 'your_resend_api_key') {
+    return null;
+  }
+
+  if (!resendClientInstance) {
+    resendClientInstance = new Resend(apiKey);
+  }
+  return resendClientInstance;
+}
 
 /**
  * Validates that the RESEND_API_KEY is present.
@@ -37,6 +53,11 @@ function validateResendConfig() {
  */
 export async function sendTestEmail(toEmail) {
   validateResendConfig();
+
+  const resend = getResendClient();
+  if (!resend) {
+    throw new Error('Missing or invalid RESEND_API_KEY.');
+  }
 
   const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
@@ -91,6 +112,7 @@ export async function sendTestEmail(toEmail) {
       subject: 'TaskSphere - Sample Test Email',
       html: htmlContent
     });
+
     if (error) {
       console.error('[EMAIL SERVICE ERROR] Test email failed:', error.message || error);
       throw new Error(error.message || 'Failed to send test email');
@@ -109,11 +131,11 @@ export async function sendTestEmail(toEmail) {
  * @param {string} otp - 6-digit verification code
  */
 export async function sendPasswordResetOTP(email, otp) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const resend = getResendClient();
   const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-  if (!apiKey || apiKey === 'your_resend_api_key') {
-    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}: RESEND_API_KEY is missing.`);
+  if (!resend) {
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}: RESEND_API_KEY is missing or placeholder.`);
     return false;
   }
 
@@ -198,10 +220,10 @@ export async function sendPasswordResetOTP(email, otp) {
  * @param {string} type - Reminder type ('30min', '1day', 'overdue')
  */
 export async function sendTaskReminderEmail(to, subject, taskData, type) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const resend = getResendClient();
   const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-  if (!apiKey || apiKey === 'your_resend_api_key') {
+  if (!resend) {
     console.warn(`[EMAIL SERVICE] Skipping email reminder to ${to} (Missing RESEND_API_KEY).`);
     return;
   }
@@ -241,10 +263,12 @@ export async function sendTaskReminderEmail(to, subject, taskData, type) {
       subject,
       html: htmlContent
     });
+
     if (error) {
       console.error(`[EMAIL SERVICE ERROR] Resend API rejected reminder email to ${to}:`, error.message || error);
       return;
     }
+
     console.log(`[EMAIL SERVICE] Sent ${type} reminder to ${to} for task "${taskData.title}" (ID: ${data?.id})`);
   } catch (err) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send email to ${to}:`, err.message || err);
