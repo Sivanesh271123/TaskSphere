@@ -21,6 +21,10 @@ import fs from 'fs';
 import dns from 'dns';
 import net from 'net';
 
+// Force Node.js to prioritize IPv4 over IPv6. 
+// Render instances frequently lack outbound IPv6, leading to ENETUNREACH errors.
+dns.setDefaultResultOrder('ipv4first');
+
 async function diagnoseSMTP(host, port) {
   console.log(`\n  🔍 [DIAGNOSTIC] Starting network diagnostics for ${host}:${port}...`);
   
