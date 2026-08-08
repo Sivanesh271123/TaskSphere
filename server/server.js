@@ -14,58 +14,11 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { initializeDatabase } from './config/db.js';
 import { initCronScheduler } from './services/cronScheduler.js';
-import { createTransporter } from './services/emailService.js';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
-import dns from 'dns';
-import net from 'net';
 
-async function diagnoseSMTPPort(host = 'smtp.gmail.com', port = 465) {
-  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Testing ${host}:${port}...`);
 
-  try {
-    const addresses = await dns.promises.resolve4(host);
-    console.log(`  🔍 [SMTP DIAGNOSTIC] [Port ${port}] DNS A (IPv4) resolved for ${host}:`, addresses);
-  } catch (err) {
-    console.error(`  ⚠️ [SMTP DIAGNOSTIC] [Port ${port}] DNS Resolution Failed for ${host}:`, err.message);
-  }
-
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(7000);
-    console.log(`  🔍 [SMTP DIAGNOSTIC] Attempting raw TCP socket connection to ${host}:${port} (7s timeout)...`);
-
-    socket.on('connect', () => {
-      console.log(`  ✅ [SMTP DIAGNOSTIC] Raw TCP socket CONNECTED to ${host}:${port} successfully!`);
-      socket.destroy();
-      resolve(true);
-    });
-
-    socket.on('timeout', () => {
-      console.error(`  ⚠️ [SMTP DIAGNOSTIC] Raw TCP socket TIMEOUT after 7000ms connecting to ${host}:${port}`);
-      socket.destroy();
-      resolve(false);
-    });
-
-    socket.on('error', (err) => {
-      console.error(`  ⚠️ [SMTP DIAGNOSTIC] Raw TCP socket ERROR on ${host}:${port}:`, err.message);
-      socket.destroy();
-      resolve(false);
-    });
-
-    socket.connect(port, host);
-  });
-}
-
-async function diagnoseSMTPPorts(host = 'smtp.gmail.com', ports = [465, 587]) {
-  console.log(`\n  🔍 [SMTP DIAGNOSTIC] Starting DNS & TCP tests for host "${host}" on ports: ${ports.join(', ')}...`);
-  const results = {};
-  for (const port of ports) {
-    results[port] = await diagnoseSMTPPort(host, port);
-  }
-  return results;
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,17 +121,7 @@ async function start() {
     // Initialize scheduled email reminders
     initCronScheduler();
 
-    // Verify Gmail SMTP diagnostic on startup for ports 465 and 587
-    try {
-      const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-      await diagnoseSMTPPorts(host, [465, 587]);
 
-      const transporter = createTransporter();
-      await transporter.verify();
-      console.log(`  📧 Gmail SMTP Transporter Verified: Successfully connected`);
-    } catch (smtpErr) {
-      console.error(`  ⚠️ Gmail SMTP Verification Warning:`, smtpErr.message || smtpErr);
-    }
 
     app.listen(PORT, () => {
       console.log(`\n  ✨ TaskSphere API Server running on http://localhost:${PORT}`);
