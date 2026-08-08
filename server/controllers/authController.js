@@ -240,7 +240,10 @@ export async function forgotPassword(req, res) {
 
     const user = await UserModel.findByEmail(normalizedEmail);
 
-    if (user) {
+    if (!user) {
+      console.log(`[FORGOT PASSWORD] No user account found for email: "${normalizedEmail}"`);
+    } else {
+      console.log(`[FORGOT PASSWORD] User account found (ID: ${user.id}) for email: "${normalizedEmail}"`);
       // Check if user already has an active, unexpired OTP (valid for 10 mins) with < 5 attempts
       const hasActiveOTP = user.reset_otp && 
                            user.reset_otp_expires && 
@@ -264,10 +267,17 @@ export async function forgotPassword(req, res) {
       }
 
       try {
-        await sendPasswordResetOTP(normalizedEmail, otp);
+        console.log(`[FORGOT PASSWORD] Dispatching sendPasswordResetOTP to "${normalizedEmail}" with OTP "${otp}"`);
+        const isSent = await sendPasswordResetOTP(normalizedEmail, otp);
+        console.log(`[FORGOT PASSWORD] sendPasswordResetOTP result for "${normalizedEmail}": ${isSent}`);
+
+        if (!isSent) {
+          console.error(`[FORGOT PASSWORD ERROR] sendPasswordResetOTP returned false for "${normalizedEmail}"`);
+          return res.status(500).json({ error: 'Failed to send verification email. Please check server logs or email settings.' });
+        }
       } catch (emailErr) {
-        console.error('[AUTH ERROR] Email sending failed for forgot password:', emailErr.message);
-        return res.status(500).json({ message: 'Unable to send verification email.' });
+        console.error('[AUTH ERROR] Exception thrown during sendPasswordResetOTP:', emailErr.stack || emailErr.message);
+        return res.status(500).json({ error: 'Unable to send verification email due to server error.' });
       }
     }
 
