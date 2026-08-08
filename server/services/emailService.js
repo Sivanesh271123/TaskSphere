@@ -101,13 +101,8 @@ export async function sendPasswordResetOTP(email, otp) {
   const from = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
   if (!apiKey || apiKey === 'your_resend_api_key') {
-    console.log(`\n  ==============================================================`);
-    console.log(`  🔑 [DEVELOPMENT OTP VERIFICATION CODE]`);
-    console.log(`  Target Email: ${email}`);
-    console.log(`  Verification Code: ${otp}`);
-    console.log(`  Note: To send actual emails, set a valid RESEND_API_KEY in .env`);
-    console.log(`  ==============================================================\n`);
-    return true;
+    console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}: RESEND_API_KEY is missing.`);
+    return false;
   }
 
   const htmlContent = `
@@ -173,11 +168,7 @@ export async function sendPasswordResetOTP(email, otp) {
     return true;
   } catch (err) {
     console.error(`[EMAIL SERVICE ERROR] Failed to send password reset OTP to ${email}:`, err.message);
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`\n  🔑 [DEV FALLBACK OTP CODE]: ${otp} (Recipient: ${email})\n`);
-      return true;
-    }
-    throw err;
+    return false;
   }
 }
 
