@@ -45,10 +45,17 @@ export function registerOAuthHelperRoutes(app) {
       return res.status(400).send(`
         <!DOCTYPE html>
         <html>
-        <head><title>Gmail OAuth Configuration Error</title></head>
-        <body style="background-color: #0E0E10; color: #FFFFFF; font-family: sans-serif; text-align: center; padding: 50px;">
-          <h2 style="color: #EF4444;">⚠️ GMAIL_CLIENT_ID is Missing</h2>
-          <p>Please add your <code>GMAIL_CLIENT_ID</code> and <code>GMAIL_CLIENT_SECRET</code> to your local <code>.env</code> file before initiating OAuth authorization.</p>
+        <head><title>Gmail OAuth Configuration Required</title></head>
+        <body style="background-color: #0E0E10; color: #FFFFFF; font-family: 'Segoe UI', system-ui, sans-serif; text-align: center; padding: 50px 20px;">
+          <div style="max-width: 560px; margin: 0 auto; background: #17171B; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 36px 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div style="display: inline-block; padding: 8px 16px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; color: #EF4444; font-weight: bold; margin-bottom: 20px;">⚠️ Action Required</div>
+            <h2 style="margin-top: 0;">GMAIL_CLIENT_ID is Missing in .env</h2>
+            <p style="color: #B3B3B3; line-height: 1.6;">Your local <code>.env</code> file currently contains placeholder values for <code>GMAIL_CLIENT_ID</code> and <code>GMAIL_CLIENT_SECRET</code>.</p>
+            <p style="color: #B3B3B3; line-height: 1.6;">Open your local <code>.env</code> file and update lines 13 & 14 with your Google Cloud OAuth credentials:</p>
+            <pre style="text-align: left; background: #141418; padding: 14px; border-radius: 8px; color: #F4C542; font-size: 13px;">GMAIL_CLIENT_ID=your_actual_client_id.apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=your_actual_client_secret</pre>
+            <p style="color: #888; font-size: 13px; margin-top: 20px;">After saving <code>.env</code>, restart your backend (<code>npm.cmd run server</code>) and refresh this page.</p>
+          </div>
         </body>
         </html>
       `);
