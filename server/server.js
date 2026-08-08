@@ -25,8 +25,10 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
-const allowedOrigins = CLIENT_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'https://tasksphere-app.onrender.com';
+const envOrigins = CLIENT_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean);
+const localhostOrigins = ['http://localhost:3000', 'http://localhost:3002', 'http://localhost:5173', 'http://127.0.0.1:3000'];
+const allowedOrigins = [...new Set([...envOrigins, ...localhostOrigins])];
 
 app.set('trust proxy', 1);
 
@@ -38,15 +40,19 @@ app.use(helmet({
 
 app.use(cors({
   origin: (origin, callback) => {
+    console.log(`[CORS Debug] Incoming request origin: ${origin || 'none'}`);
+    console.log(`[CORS Debug] Allowed origins:`, allowedOrigins);
+    
     if (!origin) return callback(null, true);
-    const isAllowed = allowedOrigins.includes(origin) || 
-                      origin.endsWith('.onrender.com') ||
-                      origin.startsWith('http://localhost:') || 
-                      origin.startsWith('http://127.0.0.1:');
+    
+    const isAllowed = allowedOrigins.includes(origin);
+    
     if (isAllowed) {
       return callback(null, true);
     }
-    return callback(null, true);
+    
+    console.warn(`[CORS Debug] Blocked origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));

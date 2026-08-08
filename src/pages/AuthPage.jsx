@@ -35,7 +35,6 @@ export default function AuthPage({ onAuthSuccess }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
@@ -82,7 +81,6 @@ export default function AuthPage({ onAuthSuccess }) {
     setError('');
     setSuccessMsg('');
     setPassword('');
-    setConfirmPassword('');
   };
 
   const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -107,7 +105,7 @@ export default function AuthPage({ onAuthSuccess }) {
     setSuccessMsg('');
 
     if (mode === 'signup') {
-      if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+      if (!fullName.trim() || !email.trim() || !password) {
         setError('All fields are required.');
         return;
       }
@@ -143,10 +141,6 @@ export default function AuthPage({ onAuthSuccess }) {
         setError('Password must contain at least one special character.');
         return;
       }
-      if (password !== confirmPassword) {
-        setError('Passwords do not match.');
-        return;
-      }
     } else {
       if (!email.trim() || !password) {
         setError('Email and password are required.');
@@ -160,18 +154,23 @@ export default function AuthPage({ onAuthSuccess }) {
 
     setIsLoading(true);
     try {
-      await onAuthSuccess(mode, { fullName: fullName.trim(), email: email.trim(), password, rememberMe });
+      const response = await onAuthSuccess(mode, { 
+        fullName: fullName.trim(), 
+        email: email.trim(), 
+        password: password, 
+        rememberMe 
+      });
       if (mode === 'signup') {
         setSuccessMsg('Account created successfully! Redirecting to login...');
         setTimeout(() => {
           setMode('login');
           setSuccessMsg('');
           setPassword('');
-          setConfirmPassword('');
           setFullName('');
         }, 1500);
       }
     } catch (err) {
+      console.error("[7] Registration error", err);
       const message = err.message || "Something went wrong. Please try again.";
       if (/network/i.test(message)) {
         setError("Unable to reach the server. Check your network connection and try again.");
@@ -469,6 +468,8 @@ export default function AuthPage({ onAuthSuccess }) {
                       <User size={18} className="auth-input-icon" />
                       <input 
                         id="authFullName"
+                        name="fullName"
+                        autoComplete="name"
                         type="text" 
                         placeholder="John Doe"
                         value={fullName}
@@ -486,6 +487,8 @@ export default function AuthPage({ onAuthSuccess }) {
                     <Mail size={18} className="auth-input-icon" />
                     <input 
                       id="authEmail"
+                      name="email"
+                      autoComplete="email"
                       type="email" 
                       placeholder="alex@example.com"
                       value={email}
@@ -518,6 +521,8 @@ export default function AuthPage({ onAuthSuccess }) {
                     <Lock size={18} className="auth-input-icon" />
                     <input 
                       id="authPassword"
+                      name="password"
+                      autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                       type={showPassword ? 'text' : 'password'} 
                       placeholder="••••••••••••"
                       value={password}
