@@ -14,6 +14,7 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { initializeDatabase } from './config/db.js';
 import { initCronScheduler } from './services/cronScheduler.js';
+import { createTransporter } from './services/emailService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -118,6 +119,15 @@ async function start() {
     
     // Initialize scheduled email reminders
     initCronScheduler();
+
+    // Verify Gmail SMTP (Port 465 SSL) configuration on startup
+    try {
+      const transporter = createTransporter();
+      await transporter.verify();
+      console.log(`  📧 Gmail SMTP Server Verified: Successfully connected on Port 465 (SSL)`);
+    } catch (smtpErr) {
+      console.error(`  ⚠️ Gmail SMTP Verification Warning:`, smtpErr.message || smtpErr);
+    }
 
     app.listen(PORT, () => {
       console.log(`\n  ✨ TaskSphere API Server running on http://localhost:${PORT}`);

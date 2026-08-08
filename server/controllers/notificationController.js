@@ -73,7 +73,7 @@ export async function deleteNotification(req, res) {
 }
 
 /**
- * Controller to trigger a sample test email via Resend HTTP API
+ * Controller to trigger a sample test email via Gmail SMTP (Port 465 SSL)
  */
 export async function sendTestEmailController(req, res) {
   try {
