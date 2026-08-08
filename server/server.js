@@ -18,6 +18,47 @@ import { createTransporter } from './services/emailService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import dns from 'dns';
+import net from 'net';
+
+async function diagnoseSMTP(host, port) {
+  console.log(`\n  🔍 [DIAGNOSTIC] Starting network diagnostics for ${host}:${port}...`);
+  
+  try {
+    const v4 = await dns.promises.resolve4(host).catch(() => []);
+    const v6 = await dns.promises.resolve6(host).catch(() => []);
+    console.log(`  🔍 [DIAGNOSTIC] DNS A (IPv4):`, v4);
+    console.log(`  🔍 [DIAGNOSTIC] DNS AAAA (IPv6):`, v6);
+  } catch (e) {
+    console.error(`  ⚠️ [DIAGNOSTIC] DNS Lookup Failed:`, e.message);
+  }
+
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(8000);
+    console.log(`  🔍 [DIAGNOSTIC] Attempting raw TCP connection to ${host}:${port}...`);
+    
+    socket.on('connect', () => {
+      console.log(`  ✅ [DIAGNOSTIC] Raw TCP socket CONNECTED successfully!`);
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.on('timeout', () => {
+      console.error(`  ⚠️ [DIAGNOSTIC] Raw TCP socket TIMEOUT after 8000ms`);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.on('error', (err) => {
+      console.error(`  ⚠️ [DIAGNOSTIC] Raw TCP socket ERROR:`, err.message);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.connect(port, host);
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,6 +163,11 @@ async function start() {
 
     // Verify SMTP configuration on startup
     try {
+      const host = process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com';
+      const port = parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587', 10);
+      
+      await diagnoseSMTP(host, port);
+
       const transporter = createTransporter();
       await transporter.verify();
       console.log(`  📧 SMTP Server Verified: Successfully connected`);
