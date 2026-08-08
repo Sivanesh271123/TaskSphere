@@ -11,6 +11,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true
+      },
+      '/oauth2callback': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/oauth2login': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
       }
     }
   },

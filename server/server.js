@@ -17,6 +17,7 @@ import { initCronScheduler } from './services/cronScheduler.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { registerOAuthHelperRoutes } from './services/oauthHelper.js';
 
 
 
@@ -69,6 +70,9 @@ const distExists = fs.existsSync(indexPath);
 if (distExists) {
   app.use(express.static(distPath));
 }
+
+// Local Gmail OAuth2 Setup Helper Routes
+registerOAuthHelperRoutes(app);
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
@@ -127,7 +131,11 @@ async function start() {
       console.log(`\n  ✨ TaskSphere API Server running on http://localhost:${PORT}`);
       console.log(`  📦 Database: ${process.env.DB_NAME || 'tasksphere'}`);
       console.log(`  🔐 Authentication enabled. Task routes are protected by JWT.`);
-      console.log(`  ✅ CORS and secure cookie handling are configured for development and production environments.\n`);
+      console.log(`  ✅ CORS and secure cookie handling are configured for development and production environments.`);
+      if (!process.env.GMAIL_REFRESH_TOKEN || process.env.GMAIL_REFRESH_TOKEN.includes('your_')) {
+        console.log(`  🔑 Gmail OAuth Setup Helper: Open http://localhost:3000/oauth2login in your browser to generate GMAIL_REFRESH_TOKEN`);
+      }
+      console.log(``);
     });
   } catch (err) {
     console.error('\n  ❌ Failed to start server:', err.message);
