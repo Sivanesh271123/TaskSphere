@@ -14,6 +14,7 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import { initializeDatabase } from './config/db.js';
 import { initCronScheduler } from './services/cronScheduler.js';
+import { createTransporter } from './services/emailService.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -118,6 +119,20 @@ async function start() {
     
     // Initialize scheduled email reminders
     initCronScheduler();
+
+    // Verify SMTP configuration on startup
+    try {
+      const transporter = createTransporter();
+      await transporter.verify();
+      console.log(`  📧 SMTP Server Verified: Successfully connected`);
+    } catch (smtpError) {
+      console.error(`  ⚠️ SMTP Connection Error:`);
+      console.error(`  - Code:`, smtpError.code);
+      console.error(`  - Command:`, smtpError.command);
+      console.error(`  - Response:`, smtpError.response);
+      console.error(`  - ResponseCode:`, smtpError.responseCode);
+      console.error(`  - Stack:`, smtpError.stack);
+    }
 
     app.listen(PORT, () => {
       console.log(`\n  ✨ TaskSphere API Server running on http://localhost:${PORT}`);

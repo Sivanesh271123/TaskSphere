@@ -51,11 +51,30 @@ export function createTransporter() {
   const user = process.env.EMAIL_USER || process.env.SMTP_USER;
   const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
 
+  console.log("SMTP Environment Check:", {
+    EMAIL_HOST: !!process.env.EMAIL_HOST,
+    EMAIL_PORT: !!process.env.EMAIL_PORT,
+    EMAIL_USER: !!process.env.EMAIL_USER,
+    EMAIL_PASS: process.env.EMAIL_PASS ? "*** PRESENT ***" : "*** MISSING ***",
+    EMAIL_FROM: !!process.env.EMAIL_FROM,
+  });
+
+  console.log("SMTP Configuration:");
+  console.log({
+    host,
+    port,
+    secure: port === 465,
+    user,
+    from: process.env.EMAIL_FROM || user
+  });
+
   return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
-    auth: { user, pass }
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000
   });
 }
 
